@@ -68,23 +68,11 @@
             color: #ccc;
         }
         
-        .controls {
-            margin-top: 15px;
-        }
-        
-        .control-group {
-            margin-bottom: 10px;
-        }
-        
-        .control-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-size: 12px;
-        }
-        
-        .slider {
-            width: 100%;
-            margin: 5px 0;
+        #touchInstructions {
+            margin-top: 10px;
+            font-size: 11px;
+            color: #aaa;
+            line-height: 1.4;
         }
     </style>
 </head>
@@ -94,18 +82,13 @@
         <div id="ui">
             <div>
                 <button id="startAR" class="button">Start AR Experience</button>
-                <button id="resetObject" class="button">Reset Object</button>
             </div>
             <div id="status">Touch to interact with the 3D object</div>
-            <div class="controls">
-                <div class="control-group">
-                    <label for="scaleSlider">Scale:</label>
-                    <input type="range" id="scaleSlider" class="slider" min="0.1" max="5" step="0.1" value="1">
-                </div>
-                <div class="control-group">
-                    <label for="rotationSpeed">Auto Rotation:</label>
-                    <input type="range" id="rotationSpeed" class="slider" min="0" max="0.05" step="0.005" value="0">
-                </div>
+            <div id="touchInstructions">
+                • Single finger drag: Rotate object<br>
+                • Double tap: Reset object<br>
+                • Pinch: Scale object<br>
+                • Two finger tap: Auto-rotate toggle
             </div>
         </div>
     </div>
@@ -141,6 +124,11 @@
                 this.autoRotationSpeed = 0;
                 this.glbModel = null;
                 this.modelBoundingBox = null;
+                this.isRotating = false;
+                this.lastTouchTime = 0;
+                this.initialDistance = 0;
+                this.isScaling = false;
+                this.lastTouchCount = 0;
                 
                 this.colors = {
                     blue: 0x4A90E2,
@@ -156,7 +144,7 @@
                 // Automatically load the hardcoded GLB file
                 setTimeout(() => {
                     this.loadGLBFromPath(this.GLB_FILE_PATH);
-                }, 500); // Small delay to ensure everything is initialized
+                }, 500);
             }
             
             init() {
@@ -188,14 +176,6 @@
                 
                 // Start render loop
                 this.animate();
-                
-                // Apply initial settings
-                this.objectScale = 1;
-                this.autoRotationSpeed = 0;
-                
-                // Update UI with initial values
-                document.getElementById('scaleSlider').value = this.objectScale;
-                document.getElementById('rotationSpeed').value = this.autoRotationSpeed;
                 
                 this.updateStatus("Initializing - Loading GLB model...");
             }
@@ -256,34 +236,9 @@
                     (error) => {
                         console.error('Error loading GLB file:', error);
                         this.updateStatus(`Error loading GLB: ${error.message || 'File not found or invalid format'}`);
-                        // Show default object if GLB fails
                         this.updateStatus("GLB loading failed - showing default 3D object");
                     }
                 );
-            }
-            
-            loadGLBFile(file) {
-                if (!file) return;
-                
-                this.updateStatus("Loading GLB file...");
-                
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const arrayBuffer = event.target.result;
-                    
-                    this.gltfLoader.parse(arrayBuffer, '', (gltf) => {
-                        this.onGLBLoaded(gltf);
-                    }, (error) => {
-                        console.error('Error loading GLB file:', error);
-                        this.updateStatus("Error loading GLB file. Please check the file format.");
-                    });
-                };
-                
-                reader.onerror = () => {
-                    this.updateStatus("Error reading file. Please try again.");
-                };
-                
-                reader.readAsArrayBuffer(file);
             }
             
             onGLBLoaded(gltf) {
@@ -341,7 +296,7 @@
                 // Update reference for interactions
                 this.arObject = this.glbModel;
                 
-                this.updateStatus(`GLB model loaded successfully! Size: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}`);
+                this.updateStatus(`GLB model loaded successfully! Touch to interact`);
                 
                 // Play animations if any
                 if (gltf.animations && gltf.animations.length > 0) {
@@ -350,7 +305,7 @@
                         const action = this.mixer.clipAction(clip);
                         action.play();
                     });
-                    this.updateStatus("GLB model loaded with animations!");
+                    this.updateStatus("GLB model loaded with animations! Touch to interact");
                 }
             }
             
@@ -402,18 +357,10 @@
             
             setupEventListeners() {
                 const startARBtn = document.getElementById('startAR');
-                const resetBtn = document.getElementById('resetObject');
-                const scaleSlider = document.getElementById('scaleSlider');
-                const rotationSpeedSlider = document.getElementById('rotationSpeed');
                 const canvas = document.getElementById('arCanvas');
                 
                 // AR controls
                 startARBtn.addEventListener('click', () => this.startAR());
-                resetBtn.addEventListener('click', () => this.resetObject());
-                
-                // Object controls
-                scaleSlider.addEventListener('input', (e) => this.updateScale(e.target.value));
-                rotationSpeedSlider.addEventListener('input', (e) => this.updateRotationSpeed(e.target.value));
                 
                 // Touch events for iPad
                 canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
@@ -424,6 +371,7 @@
                 canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
                 canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
                 canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
+                canvas.addEventListener('dblclick', (e) => this.resetObject());
                 
                 // Handle orientation changes
                 window.addEventListener('orientationchange', () => {
@@ -497,20 +445,57 @@
                 }
             }
             
+            // Get distance between two touches
+            getTouchDistance(touches) {
+                const dx = touches[0].clientX - touches[1].clientX;
+                const dy = touches[0].clientY - touches[1].clientY;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+            
             onTouchStart(event) {
                 event.preventDefault();
-                if (event.touches.length === 1) {
-                    const touch = event.touches[0];
-                    this.touchStartPos.x = touch.clientX;
-                    this.touchStartPos.y = touch.clientY;
-                    this.updateStatus('Touch detected - Rotate object');
+                const now = Date.now();
+                const touches = event.touches;
+                
+                if (touches.length === 1) {
+                    // Single touch - rotation
+                    this.touchStartPos.x = touches[0].clientX;
+                    this.touchStartPos.y = touches[0].clientY;
+                    this.isRotating = true;
+                    this.updateStatus('Rotating object');
+                    
+                    // Check for double tap
+                    if (now - this.lastTouchTime < 300) {
+                        this.resetObject();
+                        return;
+                    }
+                    this.lastTouchTime = now;
+                    
+                } else if (touches.length === 2) {
+                    // Two touches - check if it's a quick tap or pinch
+                    this.initialDistance = this.getTouchDistance(touches);
+                    this.isScaling = true;
+                    this.isRotating = false;
+                    
+                    // Check for two-finger tap (toggle auto-rotation)
+                    if (now - this.lastTouchTime < 300) {
+                        this.toggleAutoRotation();
+                        return;
+                    }
+                    
+                    this.updateStatus('Scaling object');
                 }
+                
+                this.lastTouchCount = touches.length;
             }
             
             onTouchMove(event) {
                 event.preventDefault();
-                if (event.touches.length === 1 && this.arObject) {
-                    const touch = event.touches[0];
+                const touches = event.touches;
+                
+                if (touches.length === 1 && this.isRotating && this.arObject) {
+                    // Single touch rotation
+                    const touch = touches[0];
                     const deltaX = touch.clientX - this.touchStartPos.x;
                     const deltaY = touch.clientY - this.touchStartPos.y;
                     
@@ -523,12 +508,42 @@
                     
                     this.touchStartPos.x = touch.clientX;
                     this.touchStartPos.y = touch.clientY;
+                    
+                } else if (touches.length === 2 && this.isScaling && this.arObject) {
+                    // Two touch scaling (pinch)
+                    const currentDistance = this.getTouchDistance(touches);
+                    const scale = currentDistance / this.initialDistance;
+                    
+                    // Apply scale with limits
+                    const newScale = Math.max(0.1, Math.min(5, this.objectScale * scale));
+                    this.arObject.scale.set(newScale, newScale, newScale);
+                    
+                    this.initialDistance = currentDistance;
+                    this.objectScale = newScale;
+                    
+                    this.updateStatus(`Scaling: ${this.objectScale.toFixed(2)}x`);
                 }
             }
             
             onTouchEnd(event) {
                 event.preventDefault();
-                this.updateStatus('Touch ended - Object rotated');
+                this.isRotating = false;
+                this.isScaling = false;
+                
+                if (event.touches.length === 0) {
+                    this.updateStatus('Touch interaction complete');
+                }
+            }
+            
+            // Toggle auto-rotation
+            toggleAutoRotation() {
+                if (this.autoRotationSpeed === 0) {
+                    this.autoRotationSpeed = 0.02;
+                    this.updateStatus('Auto-rotation ON');
+                } else {
+                    this.autoRotationSpeed = 0;
+                    this.updateStatus('Auto-rotation OFF');
+                }
             }
             
             // Mouse events for desktop testing
@@ -536,10 +551,11 @@
                 this.touchStartPos.x = event.clientX;
                 this.touchStartPos.y = event.clientY;
                 this.isMouseDown = true;
+                this.isRotating = true;
             }
             
             onMouseMove(event) {
-                if (this.isMouseDown && this.arObject) {
+                if (this.isMouseDown && this.arObject && this.isRotating) {
                     const deltaX = event.clientX - this.touchStartPos.x;
                     const deltaY = event.clientY - this.touchStartPos.y;
                     
@@ -556,32 +572,7 @@
             
             onMouseUp(event) {
                 this.isMouseDown = false;
-            }
-            
-            updateScale(value) {
-                this.objectScale = parseFloat(value);
-                if (this.arObject) {
-                    this.arObject.scale.set(this.objectScale, this.objectScale, this.objectScale);
-                }
-                this.updateStatus(`Scale updated to ${this.objectScale}`);
-            }
-            
-            updateRotationSpeed(value) {
-                this.autoRotationSpeed = parseFloat(value);
-                this.updateStatus(`Auto rotation speed: ${this.autoRotationSpeed}`);
-            }
-            
-            updateColor(colorName) {
-                // This function is kept for compatibility but works mainly on default objects
-                if (this.arObject && this.colors[colorName] && !this.glbModel) {
-                    const color = this.colors[colorName];
-                    this.arObject.children.forEach(child => {
-                        if (child.material) {
-                            child.material.color.setHex(color);
-                        }
-                    });
-                    this.updateStatus(`Color changed to ${colorName}`);
-                }
+                this.isRotating = false;
             }
             
             resetObject() {
@@ -594,9 +585,6 @@
                     this.arObject.rotation.set(0, 0, 0);
                     this.arObject.position.set(0, 0, -2);
                     this.arObject.scale.set(1, 1, 1);
-                    
-                    document.getElementById('scaleSlider').value = 1;
-                    document.getElementById('rotationSpeed').value = 0;
                     
                     this.updateStatus('Object reset to default state');
                 }
