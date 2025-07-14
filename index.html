@@ -110,10 +110,20 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/DRACOLoader.js"></script>
-    <script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        // Import Three.js modules
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
         class WebAR3DApp {
             constructor() {
                 // HARDCODED GLB FILE PATH - Change this to your model path
@@ -210,12 +220,12 @@
             }
             
             initGLBLoader() {
-                // Initialize GLTF loader
-                this.gltfLoader = new THREE.GLTFLoader();
+                // Initialize GLTF loader with imported modules
+                this.gltfLoader = new GLTFLoader();
                 
                 // Optional: Setup Draco decoder for compressed models
-                const dracoLoader = new THREE.DRACOLoader();
-                dracoLoader.setDecoderPath('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/libs/draco/');
+                const dracoLoader = new DRACOLoader();
+                dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.3/');
                 this.gltfLoader.setDRACOLoader(dracoLoader);
                 
                 this.updateStatus("GLB loader initialized - Ready to load models");
@@ -236,12 +246,18 @@
                         this.onGLBLoaded(gltf);
                     },
                     (progress) => {
-                        const percent = Math.round((progress.loaded / progress.total) * 100);
-                        this.updateStatus(`Loading GLB: ${percent}%`);
+                        if (progress.total > 0) {
+                            const percent = Math.round((progress.loaded / progress.total) * 100);
+                            this.updateStatus(`Loading GLB: ${percent}%`);
+                        } else {
+                            this.updateStatus(`Loading GLB: ${Math.round(progress.loaded / 1024)}KB loaded`);
+                        }
                     },
                     (error) => {
                         console.error('Error loading GLB file:', error);
-                        this.updateStatus(`Error loading GLB: ${error.message || 'Unknown error'}`);
+                        this.updateStatus(`Error loading GLB: ${error.message || 'File not found or invalid format'}`);
+                        // Show default object if GLB fails
+                        this.updateStatus("GLB loading failed - showing default 3D object");
                     }
                 );
             }
