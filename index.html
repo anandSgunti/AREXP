@@ -74,18 +74,66 @@
             color: #aaa;
             line-height: 1.4;
         }
+        
+        #loadingOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            color: white;
+        }
+        
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #333;
+            border-top: 5px solid #007AFF;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        #loadingText {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        
+        #loadingProgress {
+            font-size: 14px;
+            color: #ccc;
+        }
     </style>
 </head>
 <body>
     <div id="container">
         <canvas id="arCanvas"></canvas>
+        
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay">
+            <div class="loader"></div>
+            <div id="loadingText">Loading 3D Model...</div>
+            <div id="loadingProgress">Initializing...</div>
+        </div>
+        
         <div id="ui">
             <div>
                 <button id="startAR" class="button">Start AR Experience</button>
             </div>
             <div id="status">Touch to interact with the 3D object</div>
             <div id="touchInstructions">
-                • Single finger drag: Rotate object<br>
+                • Single finger drag: Move object left/right & up/down<br>
                 • Double tap: Reset object<br>
                 • Pinch: Scale object<br>
                 • Two finger tap: Auto-rotate toggle
@@ -129,6 +177,8 @@
                 this.initialDistance = 0;
                 this.isScaling = false;
                 this.lastTouchCount = 0;
+                this.isModelLoaded = false;
+                this.isMouseDown = false;
                 
                 this.colors = {
                     blue: 0x4A90E2,
@@ -177,7 +227,17 @@
                 // Start render loop
                 this.animate();
                 
-                this.updateStatus("Initializing - Loading GLB model...");
+                this.updateLoadingProgress("Initializing - Loading GLB model...");
+            }
+            
+            updateLoadingProgress(message) {
+                document.getElementById('loadingProgress').textContent = message;
+            }
+            
+            hideLoadingOverlay() {
+                const overlay = document.getElementById('loadingOverlay');
+                overlay.style.display = 'none';
+                this.isModelLoaded = true;
             }
             
             setupLighting() {
@@ -208,17 +268,18 @@
                 dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.3/');
                 this.gltfLoader.setDRACOLoader(dracoLoader);
                 
-                this.updateStatus("GLB loader initialized - Ready to load models");
+                this.updateLoadingProgress("GLB loader initialized - Ready to load models");
             }
             
             // Load GLB from URL or file path
             loadGLBFromPath(path) {
                 if (!path) {
-                    this.updateStatus("No GLB path provided");
+                    this.updateLoadingProgress("No GLB path provided");
+                    this.hideLoadingOverlay();
                     return;
                 }
                 
-                this.updateStatus(`Loading GLB from: ${path}`);
+                this.updateLoadingProgress(`Loading GLB from: ${path}`);
                 
                 this.gltfLoader.load(
                     path,
@@ -228,15 +289,19 @@
                     (progress) => {
                         if (progress.total > 0) {
                             const percent = Math.round((progress.loaded / progress.total) * 100);
-                            this.updateStatus(`Loading GLB: ${percent}%`);
+                            this.updateLoadingProgress(`Loading GLB: ${percent}%`);
                         } else {
-                            this.updateStatus(`Loading GLB: ${Math.round(progress.loaded / 1024)}KB loaded`);
+                            this.updateLoadingProgress(`Loading GLB: ${Math.round(progress.loaded / 1024)}KB loaded`);
                         }
                     },
                     (error) => {
                         console.error('Error loading GLB file:', error);
-                        this.updateStatus(`Error loading GLB: ${error.message || 'File not found or invalid format'}`);
-                        this.updateStatus("GLB loading failed - showing default 3D object");
+                        this.updateLoadingProgress(`Error loading GLB: ${error.message || 'File not found or invalid format'}`);
+                        // Show default object if GLB fails
+                        setTimeout(() => {
+                            this.hideLoadingOverlay();
+                            this.updateStatus("GLB loading failed - showing default 3D object");
+                        }, 2000);
                     }
                 );
             }
@@ -296,6 +361,8 @@
                 // Update reference for interactions
                 this.arObject = this.glbModel;
                 
+                // Hide loading overlay
+                this.hideLoadingOverlay();
                 this.updateStatus(`GLB model loaded successfully! Touch to interact`);
                 
                 // Play animations if any
@@ -353,6 +420,13 @@
                 
                 this.arObject = group;
                 this.scene.add(group);
+                
+                // Hide loading overlay if no GLB is being loaded
+                if (!this.isModelLoaded) {
+                    setTimeout(() => {
+                        this.hideLoadingOverlay();
+                    }, 1000);
+                }
             }
             
             setupEventListeners() {
@@ -382,6 +456,14 @@
             }
             
             async startAR() {
+                const button = document.getElementById('startAR');
+                
+                // If AR is already active, stop it and close tab
+                if (this.isARActive) {
+                    this.stopAR();
+                    return;
+                }
+                
                 try {
                     // Check for WebXR support
                     if ('xr' in navigator) {
@@ -398,7 +480,33 @@
                     console.error('AR initialization failed:', error);
                     this.updateStatus('AR not supported - using 3D view mode');
                     this.isARActive = true;
-                    document.getElementById('startAR').textContent = 'AR Active (3D Mode)';
+                    button.textContent = 'Stop AR';
+                }
+            }
+            
+            stopAR() {
+                // Stop any video streams
+                if (this.scene.background && this.scene.background.image && this.scene.background.image.srcObject) {
+                    const stream = this.scene.background.image.srcObject;
+                    const tracks = stream.getTracks();
+                    tracks.forEach(track => track.stop());
+                }
+                
+                // Reset background
+                this.scene.background = null;
+                this.isARActive = false;
+                
+                // Close the tab/window
+                if (window.opener) {
+                    window.close(); // Close if opened from another window
+                } else {
+                    // Try to close the tab
+                    try {
+                        window.close();
+                    } catch (e) {
+                        // If can't close, redirect to a blank page or show message
+                        window.location.href = 'about:blank';
+                    }
                 }
             }
             
@@ -441,7 +549,7 @@
                     console.error('Camera access failed:', error);
                     this.updateStatus('Camera unavailable - 3D view mode');
                     this.isARActive = true;
-                    document.getElementById('startAR').textContent = 'AR Active (3D Mode)';
+                    document.getElementById('startAR').textContent = 'Stop AR';
                 }
             }
             
@@ -458,11 +566,11 @@
                 const touches = event.touches;
                 
                 if (touches.length === 1) {
-                    // Single touch - rotation
+                    // Single touch - movement (not rotation)
                     this.touchStartPos.x = touches[0].clientX;
                     this.touchStartPos.y = touches[0].clientY;
                     this.isRotating = true;
-                    this.updateStatus('Rotating object');
+                    this.updateStatus('Moving object');
                     
                     // Check for double tap
                     if (now - this.lastTouchTime < 300) {
@@ -494,14 +602,19 @@
                 const touches = event.touches;
                 
                 if (touches.length === 1 && this.isRotating && this.arObject) {
-                    // Single touch rotation
+                    // Single touch movement - limited to Y-axis (left/right) and X-axis (up/down)
                     const touch = touches[0];
                     const deltaX = touch.clientX - this.touchStartPos.x;
                     const deltaY = touch.clientY - this.touchStartPos.y;
                     
-                    // Rotate object based on touch movement
+                    // Move object based on touch movement (constrained movement)
+                    // Horizontal movement (left/right) - Y-axis rotation
                     this.objectRotation.y += deltaX * 0.01;
+                    // Vertical movement (up/down) - X-axis rotation  
                     this.objectRotation.x += deltaY * 0.01;
+                    
+                    // Constrain X rotation to prevent flipping
+                    this.objectRotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.objectRotation.x));
                     
                     this.arObject.rotation.x = this.objectRotation.x;
                     this.arObject.rotation.y = this.objectRotation.y;
@@ -561,6 +674,9 @@
                     
                     this.objectRotation.y += deltaX * 0.01;
                     this.objectRotation.x += deltaY * 0.01;
+                    
+                    // Constrain X rotation
+                    this.objectRotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.objectRotation.x));
                     
                     this.arObject.rotation.x = this.objectRotation.x;
                     this.arObject.rotation.y = this.objectRotation.y;
