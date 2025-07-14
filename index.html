@@ -100,26 +100,25 @@
             <div class="controls">
                 <div class="control-group">
                     <label for="scaleSlider">Scale:</label>
-                    <input type="range" id="scaleSlider" class="slider" min="0.5" max="3" step="0.1" value="1">
+                    <input type="range" id="scaleSlider" class="slider" min="0.1" max="5" step="0.1" value="1">
                 </div>
                 <div class="control-group">
-                    <label for="colorSelect">Color:</label>
-                    <select id="colorSelect">
-                        <option value="blue">Blue</option>
-                        <option value="red">Red</option>
-                        <option value="green">Green</option>
-                        <option value="yellow">Yellow</option>
-                        <option value="purple">Purple</option>
-                    </select>
+                    <label for="rotationSpeed">Auto Rotation:</label>
+                    <input type="range" id="rotationSpeed" class="slider" min="0" max="0.05" step="0.005" value="0">
                 </div>
             </div>
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/DRACOLoader.js"></script>
     <script>
         class WebAR3DApp {
             constructor() {
+                // HARDCODED GLB FILE PATH - Change this to your model path
+                this.GLB_FILE_PATH = 'Heart.glb'; // <-- CHANGE THIS PATH
+                
                 this.scene = null;
                 this.camera = null;
                 this.renderer = null;
@@ -129,6 +128,10 @@
                 this.objectRotation = { x: 0, y: 0 };
                 this.objectPosition = { x: 0, y: 0, z: -2 };
                 this.objectScale = 1;
+                this.autoRotationSpeed = 0;
+                this.glbModel = null;
+                this.modelBoundingBox = null;
+                
                 this.colors = {
                     blue: 0x4A90E2,
                     red: 0xE74C3C,
@@ -139,6 +142,11 @@
                 
                 this.init();
                 this.setupEventListeners();
+                
+                // Automatically load the hardcoded GLB file
+                setTimeout(() => {
+                    this.loadGLBFromPath(this.GLB_FILE_PATH);
+                }, 500); // Small delay to ensure everything is initialized
             }
             
             init() {
@@ -159,8 +167,11 @@
                 // Setup lighting
                 this.setupLighting();
                 
-                // Create 3D object
-                this.create3DObject();
+                // Initialize GLB loader
+                this.initGLBLoader();
+                
+                // Create default 3D object (fallback)
+                this.createDefaultObject();
                 
                 // Position camera
                 this.camera.position.set(0, 0, 0);
@@ -168,7 +179,15 @@
                 // Start render loop
                 this.animate();
                 
-                this.updateStatus("Ready - Tap 'Start AR Experience' to begin");
+                // Apply initial settings
+                this.objectScale = 1;
+                this.autoRotationSpeed = 0;
+                
+                // Update UI with initial values
+                document.getElementById('scaleSlider').value = this.objectScale;
+                document.getElementById('rotationSpeed').value = this.autoRotationSpeed;
+                
+                this.updateStatus("Initializing - Loading GLB model...");
             }
             
             setupLighting() {
@@ -190,7 +209,136 @@
                 this.scene.add(pointLight);
             }
             
-            create3DObject() {
+            initGLBLoader() {
+                // Initialize GLTF loader
+                this.gltfLoader = new THREE.GLTFLoader();
+                
+                // Optional: Setup Draco decoder for compressed models
+                const dracoLoader = new THREE.DRACOLoader();
+                dracoLoader.setDecoderPath('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/libs/draco/');
+                this.gltfLoader.setDRACOLoader(dracoLoader);
+                
+                this.updateStatus("GLB loader initialized - Ready to load models");
+            }
+            
+            // Load GLB from URL or file path
+            loadGLBFromPath(path) {
+                if (!path) {
+                    this.updateStatus("No GLB path provided");
+                    return;
+                }
+                
+                this.updateStatus(`Loading GLB from: ${path}`);
+                
+                this.gltfLoader.load(
+                    path,
+                    (gltf) => {
+                        this.onGLBLoaded(gltf);
+                    },
+                    (progress) => {
+                        const percent = Math.round((progress.loaded / progress.total) * 100);
+                        this.updateStatus(`Loading GLB: ${percent}%`);
+                    },
+                    (error) => {
+                        console.error('Error loading GLB file:', error);
+                        this.updateStatus(`Error loading GLB: ${error.message || 'Unknown error'}`);
+                    }
+                );
+            }
+            
+            loadGLBFile(file) {
+                if (!file) return;
+                
+                this.updateStatus("Loading GLB file...");
+                
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const arrayBuffer = event.target.result;
+                    
+                    this.gltfLoader.parse(arrayBuffer, '', (gltf) => {
+                        this.onGLBLoaded(gltf);
+                    }, (error) => {
+                        console.error('Error loading GLB file:', error);
+                        this.updateStatus("Error loading GLB file. Please check the file format.");
+                    });
+                };
+                
+                reader.onerror = () => {
+                    this.updateStatus("Error reading file. Please try again.");
+                };
+                
+                reader.readAsArrayBuffer(file);
+            }
+            
+            onGLBLoaded(gltf) {
+                // Remove existing model if any
+                if (this.glbModel) {
+                    this.scene.remove(this.glbModel);
+                }
+                
+                // Remove default object if it exists
+                if (this.arObject && !this.glbModel) {
+                    this.scene.remove(this.arObject);
+                }
+                
+                // Get the loaded model
+                this.glbModel = gltf.scene;
+                
+                // Calculate bounding box for proper scaling and positioning
+                this.modelBoundingBox = new THREE.Box3().setFromObject(this.glbModel);
+                const size = this.modelBoundingBox.getSize(new THREE.Vector3());
+                const center = this.modelBoundingBox.getCenter(new THREE.Vector3());
+                
+                // Center the model
+                this.glbModel.position.sub(center);
+                
+                // Auto-scale model to fit in view (optional)
+                const maxDimension = Math.max(size.x, size.y, size.z);
+                if (maxDimension > 2) {
+                    const scale = 2 / maxDimension;
+                    this.glbModel.scale.multiplyScalar(scale);
+                }
+                
+                // Position the model
+                this.glbModel.position.set(
+                    this.objectPosition.x,
+                    this.objectPosition.y,
+                    this.objectPosition.z
+                );
+                
+                // Enable shadows for all meshes in the model
+                this.glbModel.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        
+                        // Ensure materials have proper lighting
+                        if (child.material) {
+                            child.material.needsUpdate = true;
+                        }
+                    }
+                });
+                
+                // Add model to scene
+                this.scene.add(this.glbModel);
+                
+                // Update reference for interactions
+                this.arObject = this.glbModel;
+                
+                this.updateStatus(`GLB model loaded successfully! Size: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}`);
+                
+                // Play animations if any
+                if (gltf.animations && gltf.animations.length > 0) {
+                    this.mixer = new THREE.AnimationMixer(this.glbModel);
+                    gltf.animations.forEach((clip) => {
+                        const action = this.mixer.clipAction(clip);
+                        action.play();
+                    });
+                    this.updateStatus("GLB model loaded with animations!");
+                }
+            }
+            
+            createDefaultObject() {
                 // Create a compound 3D object (cube with sphere on top)
                 const group = new THREE.Group();
                 
@@ -240,7 +388,7 @@
                 const startARBtn = document.getElementById('startAR');
                 const resetBtn = document.getElementById('resetObject');
                 const scaleSlider = document.getElementById('scaleSlider');
-                const colorSelect = document.getElementById('colorSelect');
+                const rotationSpeedSlider = document.getElementById('rotationSpeed');
                 const canvas = document.getElementById('arCanvas');
                 
                 // AR controls
@@ -249,7 +397,7 @@
                 
                 // Object controls
                 scaleSlider.addEventListener('input', (e) => this.updateScale(e.target.value));
-                colorSelect.addEventListener('change', (e) => this.updateColor(e.target.value));
+                rotationSpeedSlider.addEventListener('input', (e) => this.updateRotationSpeed(e.target.value));
                 
                 // Touch events for iPad
                 canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
@@ -402,8 +550,14 @@
                 this.updateStatus(`Scale updated to ${this.objectScale}`);
             }
             
+            updateRotationSpeed(value) {
+                this.autoRotationSpeed = parseFloat(value);
+                this.updateStatus(`Auto rotation speed: ${this.autoRotationSpeed}`);
+            }
+            
             updateColor(colorName) {
-                if (this.arObject && this.colors[colorName]) {
+                // This function is kept for compatibility but works mainly on default objects
+                if (this.arObject && this.colors[colorName] && !this.glbModel) {
                     const color = this.colors[colorName];
                     this.arObject.children.forEach(child => {
                         if (child.material) {
@@ -419,14 +573,14 @@
                     this.objectRotation = { x: 0, y: 0 };
                     this.objectPosition = { x: 0, y: 0, z: -2 };
                     this.objectScale = 1;
+                    this.autoRotationSpeed = 0;
                     
                     this.arObject.rotation.set(0, 0, 0);
                     this.arObject.position.set(0, 0, -2);
                     this.arObject.scale.set(1, 1, 1);
                     
                     document.getElementById('scaleSlider').value = 1;
-                    document.getElementById('colorSelect').value = 'blue';
-                    this.updateColor('blue');
+                    document.getElementById('rotationSpeed').value = 0;
                     
                     this.updateStatus('Object reset to default state');
                 }
@@ -445,8 +599,18 @@
             animate() {
                 requestAnimationFrame(() => this.animate());
                 
-                // Add subtle animation to the object
-                if (this.arObject) {
+                // Update animation mixer if GLB has animations
+                if (this.mixer) {
+                    this.mixer.update(0.016); // Assuming 60fps
+                }
+                
+                // Auto rotation
+                if (this.arObject && this.autoRotationSpeed > 0) {
+                    this.arObject.rotation.y += this.autoRotationSpeed;
+                }
+                
+                // Add subtle animation to default object only
+                if (this.arObject && !this.glbModel) {
                     this.arObject.children[1].rotation.y += 0.01; // Rotate the sphere
                     this.arObject.children[2].rotation.z += 0.02; // Rotate the torus
                 }
