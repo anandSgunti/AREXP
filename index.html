@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>WebAR 3D Touch Interaction</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            touch-action: none;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #arCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 14px;
+            max-width: 300px;
+        }
+        
+        .button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            touch-action: manipulation;
+        }
+        
+        .button:hover {
+            background: #0056CC;
+        }
+        
+        .button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        #status {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #ccc;
+        }
+        
+        .controls {
+            margin-top: 15px;
+        }
+        
+        .control-group {
+            margin-bottom: 10px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        
+        .slider {
+            width: 100%;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="arCanvas"></canvas>
+        <div id="ui">
+            <div>
+                <button id="startAR" class="button">Start AR Experience</button>
+                <button id="resetObject" class="button">Reset Object</button>
+            </div>
+            <div id="status">Touch to interact with the 3D object</div>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="scaleSlider">Scale:</label>
+                    <input type="range" id="scaleSlider" class="slider" min="0.5" max="3" step="0.1" value="1">
+                </div>
+                <div class="control-group">
+                    <label for="colorSelect">Color:</label>
+                    <select id="colorSelect">
+                        <option value="blue">Blue</option>
+                        <option value="red">Red</option>
+                        <option value="green">Green</option>
+                        <option value="yellow">Yellow</option>
+                        <option value="purple">Purple</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        class WebAR3DApp {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.arObject = null;
+                this.isARActive = false;
+                this.touchStartPos = { x: 0, y: 0 };
+                this.objectRotation = { x: 0, y: 0 };
+                this.objectPosition = { x: 0, y: 0, z: -2 };
+                this.objectScale = 1;
+                this.colors = {
+                    blue: 0x4A90E2,
+                    red: 0xE74C3C,
+                    green: 0x2ECC71,
+                    yellow: 0xF1C40F,
+                    purple: 0x9B59B6
+                };
+                
+                this.init();
+                this.setupEventListeners();
+            }
+            
+            init() {
+                // Initialize Three.js scene
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({ 
+                    canvas: document.getElementById('arCanvas'),
+                    antialias: true,
+                    alpha: true 
+                });
+                
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                
+                // Setup lighting
+                this.setupLighting();
+                
+                // Create 3D object
+                this.create3DObject();
+                
+                // Position camera
+                this.camera.position.set(0, 0, 0);
+                
+                // Start render loop
+                this.animate();
+                
+                this.updateStatus("Ready - Tap 'Start AR Experience' to begin");
+            }
+            
+            setupLighting() {
+                // Ambient light
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                this.scene.add(ambientLight);
+                
+                // Directional light
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(5, 10, 5);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
+                this.scene.add(directionalLight);
+                
+                // Point light for better illumination
+                const pointLight = new THREE.PointLight(0xffffff, 0.5, 100);
+                pointLight.position.set(-10, 10, -10);
+                this.scene.add(pointLight);
+            }
+            
+            create3DObject() {
+                // Create a compound 3D object (cube with sphere on top)
+                const group = new THREE.Group();
+                
+                // Base cube
+                const cubeGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+                const cubeMaterial = new THREE.MeshPhongMaterial({ 
+                    color: this.colors.blue,
+                    shininess: 100
+                });
+                const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+                cube.position.y = -0.25;
+                cube.castShadow = true;
+                cube.receiveShadow = true;
+                group.add(cube);
+                
+                // Top sphere
+                const sphereGeometry = new THREE.SphereGeometry(0.2, 32, 32);
+                const sphereMaterial = new THREE.MeshPhongMaterial({ 
+                    color: this.colors.blue,
+                    shininess: 100
+                });
+                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                sphere.position.y = 0.2;
+                sphere.castShadow = true;
+                group.add(sphere);
+                
+                // Add some decorative elements
+                const torusGeometry = new THREE.TorusGeometry(0.3, 0.05, 16, 100);
+                const torusMaterial = new THREE.MeshPhongMaterial({ 
+                    color: this.colors.blue,
+                    shininess: 100
+                });
+                const torus = new THREE.Mesh(torusGeometry, torusMaterial);
+                torus.rotation.x = Math.PI / 2;
+                torus.castShadow = true;
+                group.add(torus);
+                
+                // Position the object
+                group.position.set(this.objectPosition.x, this.objectPosition.y, this.objectPosition.z);
+                group.scale.set(this.objectScale, this.objectScale, this.objectScale);
+                
+                this.arObject = group;
+                this.scene.add(group);
+            }
+            
+            setupEventListeners() {
+                const startARBtn = document.getElementById('startAR');
+                const resetBtn = document.getElementById('resetObject');
+                const scaleSlider = document.getElementById('scaleSlider');
+                const colorSelect = document.getElementById('colorSelect');
+                const canvas = document.getElementById('arCanvas');
+                
+                // AR controls
+                startARBtn.addEventListener('click', () => this.startAR());
+                resetBtn.addEventListener('click', () => this.resetObject());
+                
+                // Object controls
+                scaleSlider.addEventListener('input', (e) => this.updateScale(e.target.value));
+                colorSelect.addEventListener('change', (e) => this.updateColor(e.target.value));
+                
+                // Touch events for iPad
+                canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
+                canvas.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
+                canvas.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
+                
+                // Mouse events for desktop testing
+                canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
+                canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
+                canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
+                
+                // Handle orientation changes
+                window.addEventListener('orientationchange', () => {
+                    setTimeout(() => this.onWindowResize(), 100);
+                });
+                
+                window.addEventListener('resize', () => this.onWindowResize());
+            }
+            
+            async startAR() {
+                try {
+                    // Check for WebXR support
+                    if ('xr' in navigator) {
+                        const isSupported = await navigator.xr.isSessionSupported('immersive-ar');
+                        if (isSupported) {
+                            this.startWebXR();
+                            return;
+                        }
+                    }
+                    
+                    // Fallback to camera-based AR simulation
+                    this.startCameraAR();
+                } catch (error) {
+                    console.error('AR initialization failed:', error);
+                    this.updateStatus('AR not supported - using 3D view mode');
+                    this.isARActive = true;
+                    document.getElementById('startAR').textContent = 'AR Active (3D Mode)';
+                }
+            }
+            
+            async startWebXR() {
+                try {
+                    const session = await navigator.xr.requestSession('immersive-ar');
+                    this.renderer.xr.setSession(session);
+                    this.isARActive = true;
+                    this.updateStatus('WebXR AR Session Active');
+                    document.getElementById('startAR').textContent = 'Stop AR';
+                } catch (error) {
+                    console.error('WebXR failed:', error);
+                    this.startCameraAR();
+                }
+            }
+            
+            async startCameraAR() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: { 
+                            facingMode: 'environment',
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    });
+                    
+                    // Create video element for background
+                    const video = document.createElement('video');
+                    video.srcObject = stream;
+                    video.play();
+                    
+                    video.addEventListener('loadedmetadata', () => {
+                        const videoTexture = new THREE.VideoTexture(video);
+                        this.scene.background = videoTexture;
+                        this.isARActive = true;
+                        this.updateStatus('Camera AR Active - Touch to interact');
+                        document.getElementById('startAR').textContent = 'Stop AR';
+                    });
+                } catch (error) {
+                    console.error('Camera access failed:', error);
+                    this.updateStatus('Camera unavailable - 3D view mode');
+                    this.isARActive = true;
+                    document.getElementById('startAR').textContent = 'AR Active (3D Mode)';
+                }
+            }
+            
+            onTouchStart(event) {
+                event.preventDefault();
+                if (event.touches.length === 1) {
+                    const touch = event.touches[0];
+                    this.touchStartPos.x = touch.clientX;
+                    this.touchStartPos.y = touch.clientY;
+                    this.updateStatus('Touch detected - Rotate object');
+                }
+            }
+            
+            onTouchMove(event) {
+                event.preventDefault();
+                if (event.touches.length === 1 && this.arObject) {
+                    const touch = event.touches[0];
+                    const deltaX = touch.clientX - this.touchStartPos.x;
+                    const deltaY = touch.clientY - this.touchStartPos.y;
+                    
+                    // Rotate object based on touch movement
+                    this.objectRotation.y += deltaX * 0.01;
+                    this.objectRotation.x += deltaY * 0.01;
+                    
+                    this.arObject.rotation.x = this.objectRotation.x;
+                    this.arObject.rotation.y = this.objectRotation.y;
+                    
+                    this.touchStartPos.x = touch.clientX;
+                    this.touchStartPos.y = touch.clientY;
+                }
+            }
+            
+            onTouchEnd(event) {
+                event.preventDefault();
+                this.updateStatus('Touch ended - Object rotated');
+            }
+            
+            // Mouse events for desktop testing
+            onMouseDown(event) {
+                this.touchStartPos.x = event.clientX;
+                this.touchStartPos.y = event.clientY;
+                this.isMouseDown = true;
+            }
+            
+            onMouseMove(event) {
+                if (this.isMouseDown && this.arObject) {
+                    const deltaX = event.clientX - this.touchStartPos.x;
+                    const deltaY = event.clientY - this.touchStartPos.y;
+                    
+                    this.objectRotation.y += deltaX * 0.01;
+                    this.objectRotation.x += deltaY * 0.01;
+                    
+                    this.arObject.rotation.x = this.objectRotation.x;
+                    this.arObject.rotation.y = this.objectRotation.y;
+                    
+                    this.touchStartPos.x = event.clientX;
+                    this.touchStartPos.y = event.clientY;
+                }
+            }
+            
+            onMouseUp(event) {
+                this.isMouseDown = false;
+            }
+            
+            updateScale(value) {
+                this.objectScale = parseFloat(value);
+                if (this.arObject) {
+                    this.arObject.scale.set(this.objectScale, this.objectScale, this.objectScale);
+                }
+                this.updateStatus(`Scale updated to ${this.objectScale}`);
+            }
+            
+            updateColor(colorName) {
+                if (this.arObject && this.colors[colorName]) {
+                    const color = this.colors[colorName];
+                    this.arObject.children.forEach(child => {
+                        if (child.material) {
+                            child.material.color.setHex(color);
+                        }
+                    });
+                    this.updateStatus(`Color changed to ${colorName}`);
+                }
+            }
+            
+            resetObject() {
+                if (this.arObject) {
+                    this.objectRotation = { x: 0, y: 0 };
+                    this.objectPosition = { x: 0, y: 0, z: -2 };
+                    this.objectScale = 1;
+                    
+                    this.arObject.rotation.set(0, 0, 0);
+                    this.arObject.position.set(0, 0, -2);
+                    this.arObject.scale.set(1, 1, 1);
+                    
+                    document.getElementById('scaleSlider').value = 1;
+                    document.getElementById('colorSelect').value = 'blue';
+                    this.updateColor('blue');
+                    
+                    this.updateStatus('Object reset to default state');
+                }
+            }
+            
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+            
+            updateStatus(message) {
+                document.getElementById('status').textContent = message;
+            }
+            
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                // Add subtle animation to the object
+                if (this.arObject) {
+                    this.arObject.children[1].rotation.y += 0.01; // Rotate the sphere
+                    this.arObject.children[2].rotation.z += 0.02; // Rotate the torus
+                }
+                
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+        
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new WebAR3DApp();
+        });
+        
+        // Prevent default touch behaviors
+        document.addEventListener('touchstart', function(e) {
+            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON') {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
+        document.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+        }, { passive: false });
+    </script>
+</body>
+</html>
