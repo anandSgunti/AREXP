@@ -158,10 +158,7 @@
         class WebAR3DApp {
             constructor() {
                 // HARDCODED GLB FILE PATH - Change this to your model path
-                this.GLB_FILE_PATH = 'lung.glb'; // <-- CHANGE THIS PATH
-                
-                // Scale factor for models - 300% = 3x scale
-                this.MODEL_SCALE_FACTOR = 10.0;
+                this.GLB_FILE_PATH = 'NEW.glb'; // <-- CHANGE THIS PATH
                 
                 this.scene = null;
                 this.camera = null;
@@ -182,14 +179,6 @@
                 this.lastTouchCount = 0;
                 this.isModelLoaded = false;
                 this.isMouseDown = false;
-                
-                // Light references for dynamic control
-                this.lights = {
-                    ambient: null,
-                    directional: [],
-                    point: [],
-                    spot: []
-                };
                 
                 this.colors = {
                     primary1: 0xDC4405,    // Orange - Primary
@@ -229,8 +218,8 @@
                 this.renderer.shadowMap.enabled = true;
                 this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 
-                // Setup enhanced lighting system
-                this.setupEnhancedLighting();
+                // Setup lighting
+                this.setupLighting();
                 
                 // Initialize GLB loader
                 this.initGLBLoader();
@@ -257,107 +246,23 @@
                 this.isModelLoaded = true;
             }
             
-            setupEnhancedLighting() {
-                // Clear existing lights
-                this.lights = {
-                    ambient: null,
-                    directional: [],
-                    point: [],
-                    spot: []
-                };
+            setupLighting() {
+                // Ambient light
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                this.scene.add(ambientLight);
                 
-                // Enhanced Ambient Light - softer base illumination
-                this.lights.ambient = new THREE.AmbientLight(0x404040, 0.4);
-                this.scene.add(this.lights.ambient);
+                // Directional light
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(5, 10, 5);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
+                this.scene.add(directionalLight);
                 
-                // Primary Directional Light - Main sun-like light
-                const directionalLight1 = new THREE.DirectionalLight(0xffffff, 1.0);
-                directionalLight1.position.set(10, 10, 5);
-                directionalLight1.castShadow = true;
-                directionalLight1.shadow.mapSize.width = 2048;
-                directionalLight1.shadow.mapSize.height = 2048;
-                directionalLight1.shadow.camera.near = 0.1;
-                directionalLight1.shadow.camera.far = 50;
-                directionalLight1.shadow.camera.left = -10;
-                directionalLight1.shadow.camera.right = 10;
-                directionalLight1.shadow.camera.top = 10;
-                directionalLight1.shadow.camera.bottom = -10;
-                this.scene.add(directionalLight1);
-                this.lights.directional.push(directionalLight1);
-                
-                // Secondary Directional Light - Fill light from opposite side
-                const directionalLight2 = new THREE.DirectionalLight(0x6BCABA, 0.6);
-                directionalLight2.position.set(-8, 8, -5);
-                directionalLight2.castShadow = true;
-                directionalLight2.shadow.mapSize.width = 1024;
-                directionalLight2.shadow.mapSize.height = 1024;
-                this.scene.add(directionalLight2);
-                this.lights.directional.push(directionalLight2);
-                
-                // Key Point Light - Warm accent light
-                const pointLight1 = new THREE.PointLight(0xFF7F41, 0.8, 100, 2);
-                pointLight1.position.set(5, 5, 5);
-                pointLight1.castShadow = true;
-                pointLight1.shadow.mapSize.width = 1024;
-                pointLight1.shadow.mapSize.height = 1024;
-                this.scene.add(pointLight1);
-                this.lights.point.push(pointLight1);
-                
-                // Rim Point Light - Cool rim lighting
-                const pointLight2 = new THREE.PointLight(0x279989, 0.6, 80, 1.5);
-                pointLight2.position.set(-5, 3, -5);
-                pointLight2.castShadow = true;
-                this.scene.add(pointLight2);
-                this.lights.point.push(pointLight2);
-                
-                // Background Point Light - Subtle background illumination
-                const pointLight3 = new THREE.PointLight(0xDC4405, 0.4, 60, 2);
-                pointLight3.position.set(0, -5, -8);
-                this.scene.add(pointLight3);
-                this.lights.point.push(pointLight3);
-                
-                // Spot Light - Focused dramatic lighting
-                const spotLight = new THREE.SpotLight(0xffffff, 1.2, 100, Math.PI / 6, 0.5, 2);
-                spotLight.position.set(0, 15, 0);
-                spotLight.target.position.set(0, 0, -2);
-                spotLight.castShadow = true;
-                spotLight.shadow.mapSize.width = 2048;
-                spotLight.shadow.mapSize.height = 2048;
-                this.scene.add(spotLight);
-                this.scene.add(spotLight.target);
-                this.lights.spot.push(spotLight);
-                
-                // Add subtle animated light movement
-                this.animateLights();
-                
-                this.updateLoadingProgress("Enhanced lighting system initialized");
-            }
-            
-            animateLights() {
-                // Animate point lights in a subtle pattern
-                const animateLight = () => {
-                    const time = Date.now() * 0.001;
-                    
-                    // Animate point lights with subtle movement
-                    if (this.lights.point.length > 0) {
-                        this.lights.point[0].position.x = 20;
-                        this.lights.point[0].position.y = 20;
-                        
-                        if (this.lights.point.length > 1) {
-                            this.lights.point[1].position.x = -20;
-                            this.lights.point[1].position.z = -20;
-                        }
-                    }
-                    
-                    // Subtle intensity variation for ambient light
-                    if (this.lights.ambient) {
-                        this.lights.ambient.intensity = 0.4 + Math.sin(time * 0.2) * 0.1;
-                    }
-                    
-                    requestAnimationFrame(animateLight);
-                };
-                
-                animateLight();
+                // Point light for better illumination
+                const pointLight = new THREE.PointLight(0xffffff, 0.5, 100);
+                pointLight.position.set(-10, 10, -10);
+                this.scene.add(pointLight);
             }
             
             initGLBLoader() {
@@ -429,21 +334,12 @@
                 // Center the model
                 this.glbModel.position.sub(center);
                 
-                // Apply 300% scale (3x) to the model
-                const baseScale = this.MODEL_SCALE_FACTOR;
-                
-                // Auto-scale model to fit in view with the new scale factor
+                // Auto-scale model to fit in view (optional)
                 const maxDimension = Math.max(size.x, size.y, size.z);
-                let finalScale = baseScale;
-                
-                // If model is too large even with 300% scale, adjust it
-                if (maxDimension * baseScale > 6) {
-                    finalScale = 6 / maxDimension;
-                } else {
-                    finalScale = baseScale;
+                if (maxDimension > 2) {
+                    const scale = 2 / maxDimension;
+                    this.glbModel.scale.multiplyScalar(scale);
                 }
-                
-                this.glbModel.scale.set(finalScale, finalScale, finalScale);
                 
                 // Position the model
                 this.glbModel.position.set(
@@ -452,27 +348,15 @@
                     this.objectPosition.z
                 );
                 
-                // Enable shadows and enhanced materials for all meshes in the model
+                // Enable shadows for all meshes in the model
                 this.glbModel.traverse((child) => {
                     if (child.isMesh) {
                         child.castShadow = true;
                         child.receiveShadow = true;
                         
-                        // Enhance materials for better lighting response
+                        // Ensure materials have proper lighting
                         if (child.material) {
                             child.material.needsUpdate = true;
-                            
-                            // If it's a basic material, enhance it for better lighting
-                            if (child.material.type === 'MeshBasicMaterial') {
-                                const enhancedMaterial = new THREE.MeshPhongMaterial({
-                                    color: child.material.color,
-                                    map: child.material.map,
-                                    transparent: child.material.transparent,
-                                    opacity: child.material.opacity,
-                                    shininess: 100
-                                });
-                                child.material = enhancedMaterial;
-                            }
                         }
                     }
                 });
@@ -483,12 +367,9 @@
                 // Update reference for interactions
                 this.arObject = this.glbModel;
                 
-                // Update the object scale tracking
-                this.objectScale = finalScale;
-                
                 // Hide loading overlay
                 this.hideLoadingOverlay();
-                this.updateStatus(`GLB model loaded at ${Math.round(finalScale * 100)}% scale! Touch to interact`);
+                this.updateStatus(`GLB model loaded successfully! Touch to interact`);
                 
                 // Play animations if any
                 if (gltf.animations && gltf.animations.length > 0) {
@@ -497,42 +378,39 @@
                         const action = this.mixer.clipAction(clip);
                         action.play();
                     });
-                    this.updateStatus(`GLB model loaded with animations at ${Math.round(finalScale * 100)}% scale!`);
+                    this.updateStatus("GLB model loaded with animations! Touch to interact");
                 }
             }
             
             createDefaultObject() {
-                // Create a compound 3D object (cube with sphere on top) at 300% scale
+                // Create a compound 3D object (cube with sphere on top)
                 const group = new THREE.Group();
                 
-                // Apply 300% scale to default object as well
-                const scale = this.MODEL_SCALE_FACTOR;
-                
                 // Base cube
-                const cubeGeometry = new THREE.BoxGeometry(0.5 * scale, 0.5 * scale, 0.5 * scale);
+                const cubeGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
                 const cubeMaterial = new THREE.MeshPhongMaterial({ 
                     color: this.colors.primary1, // Orange
                     shininess: 100
                 });
                 const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-                cube.position.y = -0.25 * scale;
+                cube.position.y = -0.25;
                 cube.castShadow = true;
                 cube.receiveShadow = true;
                 group.add(cube);
                 
                 // Top sphere
-                const sphereGeometry = new THREE.SphereGeometry(0.2 * scale, 32, 32);
+                const sphereGeometry = new THREE.SphereGeometry(0.2, 32, 32);
                 const sphereMaterial = new THREE.MeshPhongMaterial({ 
                     color: this.colors.primary2, // Teal
                     shininess: 100
                 });
                 const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-                sphere.position.y = 0.2 * scale;
+                sphere.position.y = 0.2;
                 sphere.castShadow = true;
                 group.add(sphere);
                 
                 // Add some decorative elements
-                const torusGeometry = new THREE.TorusGeometry(0.3 * scale, 0.05 * scale, 16, 100);
+                const torusGeometry = new THREE.TorusGeometry(0.3, 0.05, 16, 100);
                 const torusMaterial = new THREE.MeshPhongMaterial({ 
                     color: this.colors.secondary1, // Light Orange
                     shininess: 100
@@ -548,9 +426,6 @@
                 
                 this.arObject = group;
                 this.scene.add(group);
-                
-                // Update scale tracking
-                this.objectScale = scale;
                 
                 // Hide loading overlay if no GLB is being loaded
                 if (!this.isModelLoaded) {
@@ -759,7 +634,7 @@
                     const scale = currentDistance / this.initialDistance;
                     
                     // Apply scale with limits
-                    const newScale = Math.max(0.1, Math.min(10, this.objectScale * scale));
+                    const newScale = Math.max(0.1, Math.min(5, this.objectScale * scale));
                     this.arObject.scale.set(newScale, newScale, newScale);
                     
                     this.initialDistance = currentDistance;
@@ -826,14 +701,14 @@
                 if (this.arObject) {
                     this.objectRotation = { x: 0, y: 0 };
                     this.objectPosition = { x: 0, y: 0, z: -2 };
-                    this.objectScale = this.glbModel ? this.MODEL_SCALE_FACTOR : this.MODEL_SCALE_FACTOR;
+                    this.objectScale = 1;
                     this.autoRotationSpeed = 0;
                     
                     this.arObject.rotation.set(0, 0, 0);
                     this.arObject.position.set(0, 0, -2);
-                    this.arObject.scale.set(this.objectScale, this.objectScale, this.objectScale);
+                    this.arObject.scale.set(1, 1, 1);
                     
-                    this.updateStatus('Object reset to default state (300% scale)');
+                    this.updateStatus('Object reset to default state');
                 }
             }
             
