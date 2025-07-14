@@ -3,112 +3,128 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>WebAR 3D Touch Interaction</title>
+    <title>Industry Grade WebAR</title>
     <style>
-        body {
+        * {
             margin: 0;
             padding: 0;
-            background-color: #000;
-            overflow: hidden;
-            font-family: Arial, sans-serif;
-            touch-action: none;
+            box-sizing: border-box;
         }
         
-        #container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
+        body {
+            background-color: #000;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
         }
         
         #arCanvas {
-            position: absolute;
+            position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-        }
-        
-        #ui {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 1000;
-            color: white;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px;
-            border-radius: 10px;
-            font-size: 14px;
-            max-width: 300px;
-        }
-        
-        .button {
-            background: #007AFF;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            touch-action: manipulation;
-        }
-        
-        .button:hover {
-            background: #0056CC;
-        }
-        
-        .button:disabled {
-            background: #666;
-            cursor: not-allowed;
-        }
-        
-        #status {
-            margin-top: 10px;
-            font-size: 12px;
-            color: #ccc;
-        }
-        
-        .controls {
-            margin-top: 15px;
-        }
-        
-        .control-group {
-            margin-bottom: 10px;
-        }
-        
-        .control-group label {
             display: block;
-            margin-bottom: 5px;
-            font-size: 12px;
+            background: #000;
         }
         
-        .slider {
-            width: 100%;
-            margin: 5px 0;
+        /* Minimal status indicator - only shows briefly */
+        #statusIndicator {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 500;
+            z-index: 1000;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        #statusIndicator.show {
+            opacity: 1;
+        }
+        
+        /* Touch gesture indicators */
+        .touch-indicator {
+            position: fixed;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            pointer-events: none;
+            z-index: 999;
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.2s ease;
+        }
+        
+        .touch-indicator.active {
+            opacity: 1;
+            transform: scale(1);
+        }
+        
+        /* Loading indicator */
+        #loadingIndicator {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1001;
+            opacity: 1;
+            transition: opacity 0.5s ease;
+        }
+        
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Performance optimizations */
+        #arCanvas {
+            will-change: transform;
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
         }
     </style>
 </head>
 <body>
-    <div id="container">
-        <canvas id="arCanvas"></canvas>
-        <div id="ui">
-            <div>
-                <button id="startAR" class="button">Start AR Experience</button>
-                <button id="resetObject" class="button">Reset Object</button>
-            </div>
-            <div id="status">Touch to interact with the 3D object</div>
-            <div class="controls">
-                <div class="control-group">
-                    <label for="scaleSlider">Scale:</label>
-                    <input type="range" id="scaleSlider" class="slider" min="0.1" max="5" step="0.1" value="1">
-                </div>
-                <div class="control-group">
-                    <label for="rotationSpeed">Auto Rotation:</label>
-                    <input type="range" id="rotationSpeed" class="slider" min="0" max="0.05" step="0.005" value="0">
-                </div>
-            </div>
-        </div>
+    <canvas id="arCanvas"></canvas>
+    
+    <!-- Minimal status indicator -->
+    <div id="statusIndicator"></div>
+    
+    <!-- Loading indicator -->
+    <div id="loadingIndicator">
+        <div class="loading-spinner"></div>
     </div>
+    
+    <!-- Touch indicators -->
+    <div class="touch-indicator" id="touchIndicator1"></div>
+    <div class="touch-indicator" id="touchIndicator2"></div>
 
     <script type="importmap">
         {
@@ -118,538 +134,1050 @@
             }
         }
     </script>
+    
     <script type="module">
-        // Import Three.js modules
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
-        class WebAR3DApp {
+        class IndustryGradeWebAR {
             constructor() {
-                // HARDCODED GLB FILE PATH - Change this to your model path
-                this.GLB_FILE_PATH = 'Heart.glb'; // <-- CHANGE THIS PATH
-                
-                this.scene = null;
-                this.camera = null;
-                this.renderer = null;
-                this.arObject = null;
-                this.isARActive = false;
-                this.touchStartPos = { x: 0, y: 0 };
-                this.objectRotation = { x: 0, y: 0 };
-                this.objectPosition = { x: 0, y: 0, z: -2 };
-                this.objectScale = 1;
-                this.autoRotationSpeed = 0;
-                this.glbModel = null;
-                this.modelBoundingBox = null;
-                
-                this.colors = {
-                    blue: 0x4A90E2,
-                    red: 0xE74C3C,
-                    green: 0x2ECC71,
-                    yellow: 0xF1C40F,
-                    purple: 0x9B59B6
+                // Configuration
+                this.config = {
+                    glbPath: 'NEW.glb', // Change this to your model path
+                    initialScale: 1,
+                    minScale: 0.1,
+                    maxScale: 5,
+                    rotationSensitivity: 0.008,
+                    scaleSensitivity: 0.005,
+                    positionSensitivity: 0.003,
+                    autoRotation: false,
+                    autoRotationSpeed: 0.01,
+                    enableHapticFeedback: true,
+                    statusTimeout: 2000,
+                    performance: {
+                        shadowMapSize: 1024,
+                        pixelRatio: Math.min(window.devicePixelRatio, 2),
+                        antialias: true
+                    }
                 };
                 
-                this.init();
-                this.setupEventListeners();
+                // State management
+                this.state = {
+                    isARActive: false,
+                    isLoading: true,
+                    currentModel: null,
+                    mixer: null,
+                    touches: new Map(),
+                    lastTouchDistance: 0,
+                    lastTouchCenter: null,
+                    objectRotation: { x: 0, y: 0, z: 0 },
+                    objectPosition: { x: 0, y: 0, z: -2 },
+                    objectScale: this.config.initialScale,
+                    gestureState: 'none' // 'none', 'rotate', 'scale', 'translate'
+                };
                 
-                // Automatically load the hardcoded GLB file
-                setTimeout(() => {
-                    this.loadGLBFromPath(this.GLB_FILE_PATH);
-                }, 500); // Small delay to ensure everything is initialized
-            }
-            
-            init() {
-                // Initialize Three.js scene
-                this.scene = new THREE.Scene();
-                this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
-                this.renderer = new THREE.WebGLRenderer({ 
-                    canvas: document.getElementById('arCanvas'),
-                    antialias: true,
-                    alpha: true 
-                });
-                
-                this.renderer.setSize(window.innerWidth, window.innerHeight);
-                this.renderer.setPixelRatio(window.devicePixelRatio);
-                this.renderer.shadowMap.enabled = true;
-                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                // Initialize Three.js
+                this.initThreeJS();
                 
                 // Setup lighting
                 this.setupLighting();
                 
-                // Initialize GLB loader
-                this.initGLBLoader();
+                // Initialize loaders
+                this.initLoaders();
                 
-                // Create default 3D object (fallback)
-                this.createDefaultObject();
+                // Setup event listeners
+                this.setupEventListeners();
                 
-                // Position camera
-                this.camera.position.set(0, 0, 0);
+                // Load model
+                this.loadModel();
                 
                 // Start render loop
                 this.animate();
                 
-                // Apply initial settings
-                this.objectScale = 1;
-                this.autoRotationSpeed = 0;
+                // Initialize AR
+                this.initAR();
+            }
+            
+            initThreeJS() {
+                // Scene
+                this.scene = new THREE.Scene();
                 
-                // Update UI with initial values
-                document.getElementById('scaleSlider').value = this.objectScale;
-                document.getElementById('rotationSpeed').value = this.autoRotationSpeed;
+                // Camera
+                this.camera = new THREE.PerspectiveCamera(
+                    75,
+                    window.innerWidth / window.innerHeight,
+                    0.01,
+                    1000
+                );
+                this.camera.position.set(0, 0, 0);
                 
-                this.updateStatus("Initializing - Loading GLB model...");
+                // Renderer
+                this.renderer = new THREE.WebGLRenderer({
+                    canvas: document.getElementById('arCanvas'),
+                    antialias: this.config.performance.antialias,
+                    alpha: true,
+                    powerPreference: "high-performance"
+                });
+                
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(this.config.performance.pixelRatio);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = 1;
+                
+                // Performance optimizations
+                this.renderer.shadowMap.autoUpdate = false;
+                this.renderer.info.autoReset = false;
             }
             
             setupLighting() {
                 // Ambient light
-                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
                 this.scene.add(ambientLight);
                 
-                // Directional light
+                // Main directional light
                 const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
                 directionalLight.position.set(5, 10, 5);
                 directionalLight.castShadow = true;
-                directionalLight.shadow.mapSize.width = 2048;
-                directionalLight.shadow.mapSize.height = 2048;
+                directionalLight.shadow.mapSize.width = this.config.performance.shadowMapSize;
+                directionalLight.shadow.mapSize.height = this.config.performance.shadowMapSize;
+                directionalLight.shadow.camera.near = 0.1;
+                directionalLight.shadow.camera.far = 50;
+                directionalLight.shadow.camera.left = -10;
+                directionalLight.shadow.camera.right = 10;
+                directionalLight.shadow.camera.top = 10;
+                directionalLight.shadow.camera.bottom = -10;
                 this.scene.add(directionalLight);
                 
-                // Point light for better illumination
-                const pointLight = new THREE.PointLight(0xffffff, 0.5, 100);
-                pointLight.position.set(-10, 10, -10);
-                this.scene.add(pointLight);
+                // Fill light
+                const fillLight = new THREE.DirectionalLight(0x4080ff, 0.3);
+                fillLight.position.set(-5, 5, -5);
+                this.scene.add(fillLight);
+                
+                // Environment light
+                const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x606060, 0.3);
+                this.scene.add(hemiLight);
             }
             
-            initGLBLoader() {
-                // Initialize GLTF loader with imported modules
+            initLoaders() {
+                // GLTF Loader
                 this.gltfLoader = new GLTFLoader();
                 
-                // Optional: Setup Draco decoder for compressed models
+                // Draco Loader for compression
                 const dracoLoader = new DRACOLoader();
-                dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.3/');
+                dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.0/');
                 this.gltfLoader.setDRACOLoader(dracoLoader);
-                
-                this.updateStatus("GLB loader initialized - Ready to load models");
-            }
-            
-            // Load GLB from URL or file path
-            loadGLBFromPath(path) {
-                if (!path) {
-                    this.updateStatus("No GLB path provided");
-                    return;
-                }
-                
-                this.updateStatus(`Loading GLB from: ${path}`);
-                
-                this.gltfLoader.load(
-                    path,
-                    (gltf) => {
-                        this.onGLBLoaded(gltf);
-                    },
-                    (progress) => {
-                        if (progress.total > 0) {
-                            const percent = Math.round((progress.loaded / progress.total) * 100);
-                            this.updateStatus(`Loading GLB: ${percent}%`);
-                        } else {
-                            this.updateStatus(`Loading GLB: ${Math.round(progress.loaded / 1024)}KB loaded`);
-                        }
-                    },
-                    (error) => {
-                        console.error('Error loading GLB file:', error);
-                        this.updateStatus(`Error loading GLB: ${error.message || 'File not found or invalid format'}`);
-                        // Show default object if GLB fails
-                        this.updateStatus("GLB loading failed - showing default 3D object");
-                    }
-                );
-            }
-            
-            loadGLBFile(file) {
-                if (!file) return;
-                
-                this.updateStatus("Loading GLB file...");
-                
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const arrayBuffer = event.target.result;
-                    
-                    this.gltfLoader.parse(arrayBuffer, '', (gltf) => {
-                        this.onGLBLoaded(gltf);
-                    }, (error) => {
-                        console.error('Error loading GLB file:', error);
-                        this.updateStatus("Error loading GLB file. Please check the file format.");
-                    });
-                };
-                
-                reader.onerror = () => {
-                    this.updateStatus("Error reading file. Please try again.");
-                };
-                
-                reader.readAsArrayBuffer(file);
-            }
-            
-            onGLBLoaded(gltf) {
-                // Remove existing model if any
-                if (this.glbModel) {
-                    this.scene.remove(this.glbModel);
-                }
-                
-                // Remove default object if it exists
-                if (this.arObject && !this.glbModel) {
-                    this.scene.remove(this.arObject);
-                }
-                
-                // Get the loaded model
-                this.glbModel = gltf.scene;
-                
-                // Calculate bounding box for proper scaling and positioning
-                this.modelBoundingBox = new THREE.Box3().setFromObject(this.glbModel);
-                const size = this.modelBoundingBox.getSize(new THREE.Vector3());
-                const center = this.modelBoundingBox.getCenter(new THREE.Vector3());
-                
-                // Center the model
-                this.glbModel.position.sub(center);
-                
-                // Auto-scale model to fit in view (optional)
-                const maxDimension = Math.max(size.x, size.y, size.z);
-                if (maxDimension > 2) {
-                    const scale = 2 / maxDimension;
-                    this.glbModel.scale.multiplyScalar(scale);
-                }
-                
-                // Position the model
-                this.glbModel.position.set(
-                    this.objectPosition.x,
-                    this.objectPosition.y,
-                    this.objectPosition.z
-                );
-                
-                // Enable shadows for all meshes in the model
-                this.glbModel.traverse((child) => {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                        child.receiveShadow = true;
-                        
-                        // Ensure materials have proper lighting
-                        if (child.material) {
-                            child.material.needsUpdate = true;
-                        }
-                    }
-                });
-                
-                // Add model to scene
-                this.scene.add(this.glbModel);
-                
-                // Update reference for interactions
-                this.arObject = this.glbModel;
-                
-                this.updateStatus(`GLB model loaded successfully! Size: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)}`);
-                
-                // Play animations if any
-                if (gltf.animations && gltf.animations.length > 0) {
-                    this.mixer = new THREE.AnimationMixer(this.glbModel);
-                    gltf.animations.forEach((clip) => {
-                        const action = this.mixer.clipAction(clip);
-                        action.play();
-                    });
-                    this.updateStatus("GLB model loaded with animations!");
-                }
-            }
-            
-            createDefaultObject() {
-                // Create a compound 3D object (cube with sphere on top)
-                const group = new THREE.Group();
-                
-                // Base cube
-                const cubeGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-                const cubeMaterial = new THREE.MeshPhongMaterial({ 
-                    color: this.colors.blue,
-                    shininess: 100
-                });
-                const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-                cube.position.y = -0.25;
-                cube.castShadow = true;
-                cube.receiveShadow = true;
-                group.add(cube);
-                
-                // Top sphere
-                const sphereGeometry = new THREE.SphereGeometry(0.2, 32, 32);
-                const sphereMaterial = new THREE.MeshPhongMaterial({ 
-                    color: this.colors.blue,
-                    shininess: 100
-                });
-                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-                sphere.position.y = 0.2;
-                sphere.castShadow = true;
-                group.add(sphere);
-                
-                // Add some decorative elements
-                const torusGeometry = new THREE.TorusGeometry(0.3, 0.05, 16, 100);
-                const torusMaterial = new THREE.MeshPhongMaterial({ 
-                    color: this.colors.blue,
-                    shininess: 100
-                });
-                const torus = new THREE.Mesh(torusGeometry, torusMaterial);
-                torus.rotation.x = Math.PI / 2;
-                torus.castShadow = true;
-                group.add(torus);
-                
-                // Position the object
-                group.position.set(this.objectPosition.x, this.objectPosition.y, this.objectPosition.z);
-                group.scale.set(this.objectScale, this.objectScale, this.objectScale);
-                
-                this.arObject = group;
-                this.scene.add(group);
             }
             
             setupEventListeners() {
-                const startARBtn = document.getElementById('startAR');
-                const resetBtn = document.getElementById('resetObject');
-                const scaleSlider = document.getElementById('scaleSlider');
-                const rotationSpeedSlider = document.getElementById('rotationSpeed');
                 const canvas = document.getElementById('arCanvas');
                 
-                // AR controls
-                startARBtn.addEventListener('click', () => this.startAR());
-                resetBtn.addEventListener('click', () => this.resetObject());
+                // Touch events with passive: false for preventDefault
+                canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
+                canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
+                canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false });
                 
-                // Object controls
-                scaleSlider.addEventListener('input', (e) => this.updateScale(e.target.value));
-                rotationSpeedSlider.addEventListener('input', (e) => this.updateRotationSpeed(e.target.value));
-                
-                // Touch events for iPad
-                canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
-                canvas.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
-                canvas.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
+                // Prevent context menu and selection
+                canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+                canvas.addEventListener('selectstart', (e) => e.preventDefault());
                 
                 // Mouse events for desktop testing
-                canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
-                canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
-                canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
+                canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+                canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+                canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+                canvas.addEventListener('wheel', (e) => this.handleWheel(e), { passive: false });
                 
-                // Handle orientation changes
+                // Window events
+                window.addEventListener('resize', () => this.handleResize());
                 window.addEventListener('orientationchange', () => {
-                    setTimeout(() => this.onWindowResize(), 100);
+                    setTimeout(() => this.handleResize(), 100);
                 });
                 
-                window.addEventListener('resize', () => this.onWindowResize());
+                // Visibility change for performance
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden) {
+                        this.pauseAnimations();
+                    } else {
+                        this.resumeAnimations();
+                    }
+                });
             }
             
-            async startAR() {
+            loadModel() {
+                this.showStatus('Loading 3D model...');
+                
+                this.gltfLoader.load(
+                    this.config.glbPath,
+                    (gltf) => this.onModelLoaded(gltf),
+                    (progress) => this.onLoadProgress(progress),
+                    (error) => this.onLoadError(error)
+                );
+            }
+            
+            onModelLoaded(gltf) {
+                // Remove existing model
+                if (this.state.currentModel) {
+                    this.scene.remove(this.state.currentModel);
+                }
+                
+                this.state.currentModel = gltf.scene;
+                
+                // Optimize model
+                this.optimizeModel(this.state.currentModel);
+                
+                // Position and scale model
+                this.setupModelTransform(this.state.currentModel);
+                
+                // Add to scene
+                this.scene.add(this.state.currentModel);
+                
+                // Setup animations
+                if (gltf.animations && gltf.animations.length > 0) {
+                    this.state.mixer = new THREE.AnimationMixer(this.state.currentModel);
+                    gltf.animations.forEach((clip) => {
+                        const action = this.state.mixer.clipAction(clip);
+                        action.play();
+                    });
+                }
+                
+                // Hide loading indicator
+                this.hideLoading();
+                this.showStatus('Model loaded - Touch to interact');
+                
+                // Trigger haptic feedback
+                this.triggerHapticFeedback();
+            }
+            
+            onLoadProgress(progress) {
+                if (progress.total > 0) {
+                    const percent = Math.round((progress.loaded / progress.total) * 100);
+                    this.showStatus(`Loading: ${percent}%`);
+                }
+            }
+            
+            onLoadError(error) {
+                console.error('Model loading failed:', error);
+                this.showStatus('Model loading failed');
+                this.hideLoading();
+                this.createFallbackModel();
+            }
+            
+            optimizeModel(model) {
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        // Enable shadows
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        
+                        // Optimize materials
+                        if (child.material) {
+                            child.material.needsUpdate = true;
+                            
+                            // Enable environment mapping if available
+                            if (child.material.envMap === undefined) {
+                                child.material.envMap = this.scene.environment;
+                            }
+                        }
+                        
+                        // Optimize geometry
+                        if (child.geometry) {
+                            child.geometry.computeVertexNormals();
+                            child.geometry.computeBoundingSphere();
+                        }
+                    }
+                });
+            }
+            
+            setupModelTransform(model) {
+                // Calculate bounding box
+                const box = new THREE.Box3().setFromObject(model);
+                const size = box.getSize(new THREE.Vector3());
+                const center = box.getCenter(new THREE.Vector3());
+                
+                // Center the model
+                model.position.sub(center);
+                
+                // Auto-scale to fit viewport
+                const maxDimension = Math.max(size.x, size.y, size.z);
+                if (maxDimension > 2) {
+                    const scale = 2 / maxDimension;
+                    model.scale.multiplyScalar(scale);
+                }
+                
+                // Apply current transform
+                model.position.set(
+                    this.state.objectPosition.x,
+                    this.state.objectPosition.y,
+                    this.state.objectPosition.z
+                );
+                model.scale.multiplyScalar(this.state.objectScale);
+                model.rotation.set(
+                    this.state.objectRotation.x,
+                    this.state.objectRotation.y,
+                    this.state.objectRotation.z
+                );
+            }
+            
+            createFallbackModel() {
+                // Create a sophisticated fallback model
+                const group = new THREE.Group();
+                
+                // Create multiple geometric shapes
+                const shapes = [
+                    { geo: new THREE.SphereGeometry(0.3, 32, 32), pos: [0, 0.5, 0], color: 0x4A90E2 },
+                    { geo: new THREE.BoxGeometry(0.6, 0.2, 0.6), pos: [0, 0, 0], color: 0x2ECC71 },
+                    { geo: new THREE.CylinderGeometry(0.1, 0.1, 0.8, 16), pos: [0, -0.5, 0], color: 0xE74C3C },
+                    { geo: new THREE.TorusGeometry(0.4, 0.05, 16, 100), pos: [0, 0.2, 0], color: 0xF39C12 }
+                ];
+                
+                shapes.forEach(shape => {
+                    const material = new THREE.MeshPhongMaterial({ 
+                        color: shape.color,
+                        shininess: 100
+                    });
+                    const mesh = new THREE.Mesh(shape.geo, material);
+                    mesh.position.set(...shape.pos);
+                    mesh.castShadow = true;
+                    mesh.receiveShadow = true;
+                    group.add(mesh);
+                });
+                
+                // Position the fallback model
+                group.position.set(
+                    this.state.objectPosition.x,
+                    this.state.objectPosition.y,
+                    this.state.objectPosition.z
+                );
+                
+                this.state.currentModel = group;
+                this.scene.add(group);
+                
+                this.showStatus('Using fallback model');
+            }
+            
+            handleTouchStart(event) {
+                event.preventDefault();
+                
+                // Store touch information
+                for (let i = 0; i < event.touches.length; i++) {
+                    const touch = event.touches[i];
+                    this.state.touches.set(touch.identifier, {
+                        x: touch.clientX,
+                        y: touch.clientY,
+                        startTime: Date.now()
+                    });
+                    
+                    // Show touch indicator
+                    this.showTouchIndicator(touch.identifier, touch.clientX, touch.clientY);
+                }
+                
+                // Determine gesture based on touch count
+                if (event.touches.length === 1) {
+                    this.state.gestureState = 'rotate';
+                    this.showStatus('Rotate');
+                } else if (event.touches.length === 2) {
+                    this.state.gestureState = 'scale';
+                    this.calculateInitialTouchDistance(event.touches);
+                    this.showStatus('Pinch to scale');
+                } else if (event.touches.length === 3) {
+                    this.state.gestureState = 'translate';
+                    this.showStatus('Move object');
+                }
+                
+                this.triggerHapticFeedback('light');
+            }
+            
+            handleTouchMove(event) {
+                event.preventDefault();
+                
+                if (!this.state.currentModel) return;
+                
+                if (this.state.gestureState === 'rotate' && event.touches.length === 1) {
+                    this.handleRotateGesture(event.touches[0]);
+                } else if (this.state.gestureState === 'scale' && event.touches.length === 2) {
+                    this.handleScaleGesture(event.touches);
+                } else if (this.state.gestureState === 'translate' && event.touches.length === 3) {
+                    this.handleTranslateGesture(event.touches);
+                }
+                
+                // Update touch indicators
+                for (let i = 0; i < event.touches.length; i++) {
+                    const touch = event.touches[i];
+                    this.updateTouchIndicator(touch.identifier, touch.clientX, touch.clientY);
+                }
+            }
+            
+            handleTouchEnd(event) {
+                event.preventDefault();
+                
+                // Remove ended touches
+                for (let i = 0; i < event.changedTouches.length; i++) {
+                    const touch = event.changedTouches[i];
+                    this.state.touches.delete(touch.identifier);
+                    this.hideTouchIndicator(touch.identifier);
+                }
+                
+                // Update gesture state
+                if (event.touches.length === 0) {
+                    this.state.gestureState = 'none';
+                    this.showStatus('Touch to interact');
+                } else if (event.touches.length === 1) {
+                    this.state.gestureState = 'rotate';
+                    this.showStatus('Rotate');
+                } else if (event.touches.length === 2) {
+                    this.state.gestureState = 'scale';
+                    this.calculateInitialTouchDistance(event.touches);
+                    this.showStatus('Pinch to scale');
+                }
+                
+                this.triggerHapticFeedback('light');
+            }
+            
+            handleRotateGesture(touch) {
+                const storedTouch = this.state.touches.get(touch.identifier);
+                if (!storedTouch) return;
+                
+                const deltaX = touch.clientX - storedTouch.x;
+                const deltaY = touch.clientY - storedTouch.y;
+                
+                this.state.objectRotation.y += deltaX * this.config.rotationSensitivity;
+                this.state.objectRotation.x += deltaY * this.config.rotationSensitivity;
+                
+                // Apply rotation
+                this.state.currentModel.rotation.x = this.state.objectRotation.x;
+                this.state.currentModel.rotation.y = this.state.objectRotation.y;
+                
+                // Update stored touch position
+                storedTouch.x = touch.clientX;
+                storedTouch.y = touch.clientY;
+                
+                // Update shadow map
+                this.renderer.shadowMap.needsUpdate = true;
+            }
+            
+            handleScaleGesture(touches) {
+                const currentDistance = this.getTouchDistance(touches);
+                
+                if (this.state.lastTouchDistance > 0) {
+                    const scale = currentDistance / this.state.lastTouchDistance;
+                    const newScale = this.state.objectScale * scale;
+                    
+                    // Clamp scale
+                    this.state.objectScale = Math.max(
+                        this.config.minScale,
+                        Math.min(this.config.maxScale, newScale)
+                    );
+                    
+                    // Apply scale
+                    this.state.currentModel.scale.setScalar(this.state.objectScale);
+                    
+                    this.triggerHapticFeedback('medium');
+                }
+                
+                this.state.lastTouchDistance = currentDistance;
+            }
+            
+            handleTranslateGesture(touches) {
+                const currentCenter = this.getTouchCenter(touches);
+                
+                if (this.state.lastTouchCenter) {
+                    const deltaX = (currentCenter.x - this.state.lastTouchCenter.x) * this.config.positionSensitivity;
+                    const deltaY = -(currentCenter.y - this.state.lastTouchCenter.y) * this.config.positionSensitivity;
+                    
+                    this.state.objectPosition.x += deltaX;
+                    this.state.objectPosition.y += deltaY;
+                    
+                    // Apply position
+                    this.state.currentModel.position.x = this.state.objectPosition.x;
+                    this.state.currentModel.position.y = this.state.objectPosition.y;
+                    
+                    this.triggerHapticFeedback('light');
+                }
+                
+                this.state.lastTouchCenter = currentCenter;
+            }
+            
+            // Mouse events for desktop testing
+            handleMouseDown(event) {
+                this.mouseDown = true;
+                this.lastMouseX = event.clientX;
+                this.lastMouseY = event.clientY;
+            }
+            
+            handleMouseMove(event) {
+                if (!this.mouseDown || !this.state.currentModel) return;
+                
+                const deltaX = event.clientX - this.lastMouseX;
+                const deltaY = event.clientY - this.lastMouseY;
+                
+                this.state.objectRotation.y += deltaX * this.config.rotationSensitivity;
+                this.state.objectRotation.x += deltaY * this.config.rotationSensitivity;
+                
+                this.state.currentModel.rotation.x = this.state.objectRotation.x;
+                this.state.currentModel.rotation.y = this.state.objectRotation.y;
+                
+                this.lastMouseX = event.clientX;
+                this.lastMouseY = event.clientY;
+            }
+            
+            handleMouseUp(event) {
+                this.mouseDown = false;
+            }
+            
+            handleWheel(event) {
+                event.preventDefault();
+                
+                if (!this.state.currentModel) return;
+                
+                const scale = event.deltaY > 0 ? 0.95 : 1.05;
+                const newScale = this.state.objectScale * scale;
+                
+                this.state.objectScale = Math.max(
+                    this.config.minScale,
+                    Math.min(this.config.maxScale, newScale)
+                );
+                
+                this.state.currentModel.scale.setScalar(this.state.objectScale);
+            }
+            
+            // Utility functions
+            getTouchDistance(touches) {
+                const dx = touches[0].clientX - touches[1].clientX;
+                const dy = touches[0].clientY - touches[1].clientY;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+            
+            getTouchCenter(touches) {
+                let x = 0, y = 0;
+                for (const touch of touches) {
+                    x += touch.clientX;
+                    y += touch.clientY;
+                }
+                return { x: x / touches.length, y: y / touches.length };
+            }
+            
+            calculateInitialTouchDistance(touches) {
+                this.state.lastTouchDistance = this.getTouchDistance(touches);
+            }
+            
+            // UI feedback functions
+            showStatus(message) {
+                const indicator = document.getElementById('statusIndicator');
+                indicator.textContent = message;
+                indicator.classList.add('show');
+                
+                clearTimeout(this.statusTimeout);
+                this.statusTimeout = setTimeout(() => {
+                    indicator.classList.remove('show');
+                }, this.config.statusTimeout);
+            }
+            
+            showTouchIndicator(id, x, y) {
+                const indicator = document.getElementById(`touchIndicator${Math.min(id + 1, 2)}`);
+                if (indicator) {
+                    indicator.style.left = (x - 30) + 'px';
+                    indicator.style.top = (y - 30) + 'px';
+                    indicator.classList.add('active');
+                }
+            }
+            
+            updateTouchIndicator(id, x, y) {
+                const indicator = document.getElementById(`touchIndicator${Math.min(id + 1, 2)}`);
+                if (indicator) {
+                    indicator.style.left = (x - 30) + 'px';
+                    indicator.style.top = (y - 30) + 'px';
+                }
+            }
+            
+            hideTouchIndicator(id) {
+                const indicator = document.getElementById(`touchIndicator${Math.min(id + 1, 2)}`);
+                if (indicator) {
+                    indicator.classList.remove('active');
+                }
+            }
+            
+            hideLoading() {
+                const loading = document.getElementById('loadingIndicator');
+                loading.style.opacity = '0';
+                setTimeout(() => {
+                    loading.style.display = 'none';
+                }, 500);
+            }
+            
+            // Haptic feedback
+            triggerHapticFeedback(intensity = 'medium') {
+                if (!this.config.enableHapticFeedback) return;
+                
+                if (navigator.vibrate) {
+                    const patterns = {
+                        light: 10,
+                        medium: 20,
+                        heavy: 50
+                    };
+                    navigator.vibrate(patterns[intensity] || patterns.medium);
+                }
+            }
+            
+            // AR initialization
+            async initAR() {
                 try {
                     // Check for WebXR support
                     if ('xr' in navigator) {
                         const isSupported = await navigator.xr.isSessionSupported('immersive-ar');
                         if (isSupported) {
-                            this.startWebXR();
+                            this.initWebXR();
                             return;
                         }
                     }
                     
-                    // Fallback to camera-based AR simulation
-                    this.startCameraAR();
+                    // Fallback to camera-based AR
+                    this.initCameraAR();
                 } catch (error) {
-                    console.error('AR initialization failed:', error);
-                    this.updateStatus('AR not supported - using 3D view mode');
-                    this.isARActive = true;
-                    document.getElementById('startAR').textContent = 'AR Active (3D Mode)';
+                    console.log('AR initialization:', error);
+                    this.state.isARActive = true;
                 }
             }
             
-            async startWebXR() {
+            async initWebXR() {
                 try {
                     const session = await navigator.xr.requestSession('immersive-ar');
                     this.renderer.xr.setSession(session);
-                    this.isARActive = true;
-                    this.updateStatus('WebXR AR Session Active');
-                    document.getElementById('startAR').textContent = 'Stop AR';
+                    this.state.isARActive = true;
+                    this.showStatus('WebXR AR Active');
                 } catch (error) {
-                    console.error('WebXR failed:', error);
-                    this.startCameraAR();
+                    this.initCameraAR();
                 }
             }
             
-            async startCameraAR() {
+            async initCameraAR() {
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({
                         video: { 
                             facingMode: 'environment',
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 }
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 }
                         }
                     });
                     
-                    // Create video element for background
                     const video = document.createElement('video');
                     video.srcObject = stream;
                     video.play();
                     
                     video.addEventListener('loadedmetadata', () => {
                         const videoTexture = new THREE.VideoTexture(video);
+                        videoTexture.minFilter = THREE.LinearFilter;
+                        videoTexture.magFilter = THREE.LinearFilter;
+                        videoTexture.format = THREE.RGBAFormat;
+                        
                         this.scene.background = videoTexture;
-                        this.isARActive = true;
-                        this.updateStatus('Camera AR Active - Touch to interact');
-                        document.getElementById('startAR').textContent = 'Stop AR';
+                        this.state.isARActive = true;
+                        this.showStatus('AR Camera Active');
                     });
                 } catch (error) {
-                    console.error('Camera access failed:', error);
-                    this.updateStatus('Camera unavailable - 3D view mode');
-                    this.isARActive = true;
-                    document.getElementById('startAR').textContent = 'AR Active (3D Mode)';
+                    this.state.isARActive = true;
+                    this.showStatus('3D Mode Active');
                 }
             }
             
-            onTouchStart(event) {
-                event.preventDefault();
-                if (event.touches.length === 1) {
-                    const touch = event.touches[0];
-                    this.touchStartPos.x = touch.clientX;
-                    this.touchStartPos.y = touch.clientY;
-                    this.updateStatus('Touch detected - Rotate object');
-                }
+            // Performance management
+            pauseAnimations() {
+                this.animationsPaused = true;
             }
             
-            onTouchMove(event) {
-                event.preventDefault();
-                if (event.touches.length === 1 && this.arObject) {
-                    const touch = event.touches[0];
-                    const deltaX = touch.clientX - this.touchStartPos.x;
-                    const deltaY = touch.clientY - this.touchStartPos.y;
-                    
-                    // Rotate object based on touch movement
-                    this.objectRotation.y += deltaX * 0.01;
-                    this.objectRotation.x += deltaY * 0.01;
-                    
-                    this.arObject.rotation.x = this.objectRotation.x;
-                    this.arObject.rotation.y = this.objectRotation.y;
-                    
-                    this.touchStartPos.x = touch.clientX;
-                    this.touchStartPos.y = touch.clientY;
-                }
+            resumeAnimations() {
+                this.animationsPaused = false;
             }
             
-            onTouchEnd(event) {
-                event.preventDefault();
-                this.updateStatus('Touch ended - Object rotated');
-            }
-            
-            // Mouse events for desktop testing
-            onMouseDown(event) {
-                this.touchStartPos.x = event.clientX;
-                this.touchStartPos.y = event.clientY;
-                this.isMouseDown = true;
-            }
-            
-            onMouseMove(event) {
-                if (this.isMouseDown && this.arObject) {
-                    const deltaX = event.clientX - this.touchStartPos.x;
-                    const deltaY = event.clientY - this.touchStartPos.y;
-                    
-                    this.objectRotation.y += deltaX * 0.01;
-                    this.objectRotation.x += deltaY * 0.01;
-                    
-                    this.arObject.rotation.x = this.objectRotation.x;
-                    this.arObject.rotation.y = this.objectRotation.y;
-                    
-                    this.touchStartPos.x = event.clientX;
-                    this.touchStartPos.y = event.clientY;
-                }
-            }
-            
-            onMouseUp(event) {
-                this.isMouseDown = false;
-            }
-            
-            updateScale(value) {
-                this.objectScale = parseFloat(value);
-                if (this.arObject) {
-                    this.arObject.scale.set(this.objectScale, this.objectScale, this.objectScale);
-                }
-                this.updateStatus(`Scale updated to ${this.objectScale}`);
-            }
-            
-            updateRotationSpeed(value) {
-                this.autoRotationSpeed = parseFloat(value);
-                this.updateStatus(`Auto rotation speed: ${this.autoRotationSpeed}`);
-            }
-            
-            updateColor(colorName) {
-                // This function is kept for compatibility but works mainly on default objects
-                if (this.arObject && this.colors[colorName] && !this.glbModel) {
-                    const color = this.colors[colorName];
-                    this.arObject.children.forEach(child => {
-                        if (child.material) {
-                            child.material.color.setHex(color);
-                        }
-                    });
-                    this.updateStatus(`Color changed to ${colorName}`);
-                }
-            }
-            
-            resetObject() {
-                if (this.arObject) {
-                    this.objectRotation = { x: 0, y: 0 };
-                    this.objectPosition = { x: 0, y: 0, z: -2 };
-                    this.objectScale = 1;
-                    this.autoRotationSpeed = 0;
-                    
-                    this.arObject.rotation.set(0, 0, 0);
-                    this.arObject.position.set(0, 0, -2);
-                    this.arObject.scale.set(1, 1, 1);
-                    
-                    document.getElementById('scaleSlider').value = 1;
-                    document.getElementById('rotationSpeed').value = 0;
-                    
-                    this.updateStatus('Object reset to default state');
-                }
-            }
-            
-            onWindowResize() {
+            // Resize handling
+            handleResize() {
                 this.camera.aspect = window.innerWidth / window.innerHeight;
                 this.camera.updateProjectionMatrix();
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
             }
             
-            updateStatus(message) {
-                document.getElementById('status').textContent = message;
-            }
-            
+            // Animation loop
             animate() {
                 requestAnimationFrame(() => this.animate());
                 
-                // Update animation mixer if GLB has animations
-                if (this.mixer) {
-                    this.mixer.update(0.016); // Assuming 60fps
+                if (this.animationsPaused) return;
+                
+                // Update animations
+                if (this.state.mixer) {
+                    this.state.mixer.update(0.016);
                 }
                 
                 // Auto rotation
-                if (this.arObject && this.autoRotationSpeed > 0) {
-                    this.arObject.rotation.y += this.autoRotationSpeed;
+                if (this.config.autoRotation && this.state.currentModel) {
+                    this.state.currentModel.rotation.y += this.config.autoRotationSpeed;
                 }
                 
-                // Add subtle animation to default object only
-                if (this.arObject && !this.glbModel) {
-                    this.arObject.children[1].rotation.y += 0.01; // Rotate the sphere
-                    this.arObject.children[2].rotation.z += 0.02; // Rotate the torus
-                }
-                
+                // Render
                 this.renderer.render(this.scene, this.camera);
+                
+                // Reset renderer info for next frame
+                this.renderer.info.reset();
             }
         }
         
-        // Initialize the app when DOM is loaded
+        // Initialize when DOM is loaded
         document.addEventListener('DOMContentLoaded', () => {
-            new WebAR3DApp();
+            new IndustryGradeWebAR();
         });
         
-        // Prevent default touch behaviors
-        document.addEventListener('touchstart', function(e) {
+        // Prevent default behaviors for a clean AR experience
+        document.addEventListener('touchstart', (e) => {
             if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON') {
                 e.preventDefault();
             }
         }, { passive: false });
         
-        document.addEventListener('touchmove', function(e) {
+        document.addEventListener('touchmove', (e) => {
             e.preventDefault();
         }, { passive: false });
-    </script>
-</body>
-</html>
+        
+        document.addEventListener('touchend', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+        
+        // Prevent zoom on double tap
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', (e) => {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                e.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, { passive: false });
+        
+        // Prevent pinch zoom
+        document.addEventListener('gesturestart', (e) => {
+            e.preventDefault();
+        });
+        
+        document.addEventListener('gesturechange', (e) => {
+            e.preventDefault();
+        });
+        
+        document.addEventListener('gestureend', (e) => {
+            e.preventDefault();
+        });
+        
+        // Performance monitoring (can be removed in production)
+        let frameCount = 0;
+        let lastTime = performance.now();
+        
+        function monitorPerformance() {
+            frameCount++;
+            const currentTime = performance.now();
+            
+            if (currentTime - lastTime >= 1000) {
+                const fps = Math.round((frameCount * 1000) / (currentTime - lastTime));
+                
+                // Log performance data (remove in production)
+                if (fps < 30) {
+                    console.warn(`Low FPS detected: ${fps}`);
+                }
+                
+                frameCount = 0;
+                lastTime = currentTime;
+            }
+            
+            requestAnimationFrame(monitorPerformance);
+        }
+        
+        // Start performance monitoring
+        monitorPerformance();
+        
+        // Advanced gesture recognition patterns
+        class AdvancedGestureRecognizer {
+            constructor() {
+                this.gestures = {
+                    tap: { duration: 200, movement: 10 },
+                    longPress: { duration: 800, movement: 10 },
+                    swipe: { duration: 300, movement: 50 },
+                    pinch: { fingers: 2, type: 'scale' },
+                    rotate: { fingers: 2, type: 'rotation' },
+                    threeFingerTap: { fingers: 3, duration: 200 }
+                };
+                
+                this.activeGestures = new Map();
+            }
+            
+            recognizeGesture(touches, startTime, endTime) {
+                const duration = endTime - startTime;
+                const touchCount = touches.length;
+                
+                // Single finger gestures
+                if (touchCount === 1) {
+                    const touch = touches[0];
+                    const movement = this.calculateMovement(touch);
+                    
+                    if (duration < this.gestures.tap.duration && movement < this.gestures.tap.movement) {
+                        return { type: 'tap', data: touch };
+                    }
+                    
+                    if (duration > this.gestures.longPress.duration && movement < this.gestures.longPress.movement) {
+                        return { type: 'longPress', data: touch };
+                    }
+                    
+                    if (movement > this.gestures.swipe.movement) {
+                        return { type: 'swipe', data: this.calculateSwipeDirection(touch) };
+                    }
+                }
+                
+                // Two finger gestures
+                if (touchCount === 2) {
+                    return { type: 'twoFingerGesture', data: touches };
+                }
+                
+                // Three finger gestures
+                if (touchCount === 3) {
+                    if (duration < this.gestures.threeFingerTap.duration) {
+                        return { type: 'threeFingerTap', data: touches };
+                    }
+                }
+                
+                return { type: 'unknown', data: null };
+            }
+            
+            calculateMovement(touch) {
+                // Calculate total movement distance
+                return Math.sqrt(
+                    Math.pow(touch.endX - touch.startX, 2) + 
+                    Math.pow(touch.endY - touch.startY, 2)
+                );
+            }
+            
+            calculateSwipeDirection(touch) {
+                const deltaX = touch.endX - touch.startX;
+                const deltaY = touch.endY - touch.startY;
+                
+                if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                    return deltaX > 0 ? 'right' : 'left';
+                } else {
+                    return deltaY > 0 ? 'down' : 'up';
+                }
+            }
+        }
+        
+        // Enhanced physics simulation for realistic object behavior
+        class PhysicsSimulator {
+            constructor() {
+                this.gravity = -9.81;
+                this.damping = 0.98;
+                this.springConstant = 0.1;
+                this.enabled = false;
+            }
+            
+            simulateInertia(object, velocity) {
+                if (!this.enabled) return;
+                
+                // Apply damping
+                velocity.multiplyScalar(this.damping);
+                
+                // Apply velocity to rotation
+                object.rotation.x += velocity.x * 0.01;
+                object.rotation.y += velocity.y * 0.01;
+                object.rotation.z += velocity.z * 0.01;
+            }
+            
+            simulateSpringBack(object, targetPosition, currentPosition) {
+                if (!this.enabled) return;
+                
+                const force = new THREE.Vector3()
+                    .subVectors(targetPosition, currentPosition)
+                    .multiplyScalar(this.springConstant);
+                
+                return force;
+            }
+        }
+        
+        // Audio feedback system
+        class AudioFeedbackSystem {
+            constructor() {
+                this.audioContext = null;
+                this.sounds = {};
+                this.enabled = true;
+                this.volume = 0.3;
+                
+                this.initAudioContext();
+                this.createSounds();
+            }
+            
+            async initAudioContext() {
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (error) {
+                    console.log('Audio context not available');
+                    this.enabled = false;
+                }
+            }
+            
+            createSounds() {
+                if (!this.enabled) return;
+                
+                // Create different sound frequencies for different interactions
+                this.sounds = {
+                    touch: 440,      // A4 note
+                    rotate: 523.25,  // C5 note
+                    scale: 659.25,   // E5 note
+                    move: 783.99     // G5 note
+                };
+            }
+            
+            playSound(type, duration = 100) {
+                if (!this.enabled || !this.audioContext) return;
+                
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(this.audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(this.sounds[type] || 440, this.audioContext.currentTime);
+                oscillator.type = 'sine';
+                
+                gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(this.volume, this.audioContext.currentTime + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + duration / 1000);
+                
+                oscillator.start(this.audioContext.currentTime);
+                oscillator.stop(this.audioContext.currentTime + duration / 1000);
+            }
+        }
+        
+        // Advanced lighting system with dynamic adjustments
+        class DynamicLightingSystem {
+            constructor(scene) {
+                this.scene = scene;
+                this.lights = [];
+                this.ambientIntensity = 0.4;
+                this.directionalIntensity = 0.8;
+                this.timeOfDay = 0.5; // 0 = night, 1 = day
+                
+                this.setupDynamicLighting();
+            }
+            
+            setupDynamicLighting() {
+                // Remove existing lights
+                this.lights.forEach(light => this.scene.remove(light));
+                this.lights = [];
+                
+                // Ambient light
+                const ambientLight = new THREE.AmbientLight(0x404040, this.ambientIntensity);
+                this.scene.add(ambientLight);
+                this.lights.push(ambientLight);
+                
+                // Key light (main directional light)
+                const keyLight = new THREE.DirectionalLight(0xffffff, this.directionalIntensity);
+                keyLight.position.set(5, 10, 5);
+                keyLight.castShadow = true;
+                this.setupShadowProperties(keyLight);
+                this.scene.add(keyLight);
+                this.lights.push(keyLight);
+                
+                // Fill light (softer, from opposite side)
+                const fillLight = new THREE.DirectionalLight(0x4080ff, 0.3);
+                fillLight.position.set(-3, 5, -3);
+                this.scene.add(fillLight);
+                this.lights.push(fillLight);
+                
+                // Rim light (for edge definition)
+                const rimLight = new THREE.DirectionalLight(0xff8040, 0.2);
+                rimLight.position.set(0, 2, -5);
+                this.scene.add(rimLight);
+                this.lights.push(rimLight);
+                
+                // Environment light
+                const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x606060, 0.3);
+                this.scene.add(hemiLight);
+                this.lights.push(hemiLight);
+            }
+            
+            setupShadowProperties(light) {
+                light.shadow.mapSize.width = 2048;
+                light.shadow.mapSize.height = 2048;
+                light.shadow.camera.near = 0.1;
+                light.shadow.camera.far = 50;
+                light.shadow.camera.left = -10;
+                light.shadow.camera.right = 10;
+                light.shadow.camera.top = 10;
+                light.shadow.camera.bottom = -10;
+                light.shadow.bias = -0.0001;
+            }
+            
+            updateTimeOfDay(time) {
+                this.timeOfDay = Math.max(0, Math.min(1, time));
+                
+                // Adjust ambient light based on time
+                const ambientColor = new THREE.Color().lerpColors(
+                    new THREE.Color(0x202040), // Night
+                    new THREE.Color(0x404040), // Day
+                    this.timeOfDay
+                );
+                
+                this.lights[0].color = ambientColor;
+                this.lights[0].intensity = this.ambientIntensity * (0.3 + 0.7 * this.timeOfDay);
+            }
+        }
+        
+        // Material enhancement system
+        class MaterialEnhancementSystem {
+            constructor() {
+                this.materials = new Map();
+                this.environmentMap = null;
+                
+                this.createEnvironmentMap();
+            }
+            
+            createEnvironmentMap() {
+                // Create a simple environment map for reflections
+                const loader = new THREE.CubeTextureLoader();
+                
+                // You can replace these with actual environment textures
+                const urls = [
+                    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', // px
+                    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', // nx
+                    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', // py
+                    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', // ny
+                    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', // pz
+                    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='  // nz
+                ];
+                
+                this.environmentMap = loader.load(urls);
+            }
+            
+            enhanceMaterial(material) {
+                if (material.isMeshStandardMaterial || material.isMeshPhysicalMaterial) {
+                    // Add environment mapping
+                    material.envMap = this.environmentMap;
+                    material.envMapIntensity = 0.5;
+                    
+                    // Enhance physical properties
+                    if (material.isMeshPhysicalMaterial) {
+                        material.clearcoat = 0.1;
+                        material.clearcoatRoughness = 0.1;
+                        material.reflectivity = 0.3;
+                    }
+                    
+                    material.needsUpdate = true;
+                }
+                
+                return material;
+            }
+            
+            processMaterials(object) {
+                object.traverse((child) => {
+                    if (child.isMesh && child.material) {
+                        if (Array.isArray(child.material)) {
+                            child.material = child.material.map(mat => this.enhanceMaterial(mat));
+                        } else {
+                            child.material = this.enhanceMaterial(child.material);
+                        }
+                    }
+                });
+            }
+        }
