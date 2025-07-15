@@ -1,890 +1,535 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>WebAR 3D Touch Interaction</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #000;
-            overflow: hidden;
-            font-family: Arial, sans-serif;
-            touch-action: none;
-        }
-        
-        #container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-        }
-        
-        #arCanvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-        
-        #ui {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 1000;
-            color: white;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px;
-            border-radius: 10px;
-            font-size: 14px;
-            max-width: 300px;
-        }
-        
-        .button {
-            background: #DC4405;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            touch-action: manipulation;
-        }
-        
-        .button:hover {
-            background: #279989;
-        }
-        
-        .button:disabled {
-            background: #75787B;
-            cursor: not-allowed;
-        }
-        
-        #status {
-            margin-top: 10px;
-            font-size: 12px;
-            color: #ccc;
-        }
-        
-        #touchInstructions {
-            margin-top: 10px;
-            font-size: 11px;
-            color: #aaa;
-            line-height: 1.4;
-        }
-        
-        #loadingOverlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-            color: white;
-        }
-        
-        .loader {
-            width: 50px;
-            height: 50px;
-            border: 5px solid #75787B;
-            border-top: 5px solid #DC4405;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        #loadingText {
-            font-size: 16px;
-            margin-bottom: 10px;
-        }
-        
-        #loadingProgress {
-            font-size: 14px;
-            color: #ccc;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>AR GLTF Viewer (iOS Safari iPad)</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+      background-color: #111;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    
+    #ui {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    .button {
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      border: 2px solid #007AFF;
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    
+    .button:hover {
+      background: rgba(0, 122, 255, 0.2);
+      transform: scale(1.05);
+    }
+    
+    .button:disabled {
+      background: rgba(128, 128, 128, 0.5);
+      color: #888;
+      border-color: #666;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    #status {
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    
+    #instructions {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: none;
+    }
+    
+    .ar-instructions {
+      display: block !important;
+    }
+  </style>
 </head>
 <body>
-    <div id="container">
-        <canvas id="arCanvas"></canvas>
-        
-        <!-- Loading Overlay -->
-        <div id="loadingOverlay">
-            <div class="loader"></div>
-            <div id="loadingText">Loading 3D Model...</div>
-            <div id="loadingProgress">Initializing...</div>
-        </div>
-        
-        <div id="ui">
-            <div>
-                <button id="startAR" class="button">Start AR Experience</button>
-            </div>
-            <div id="status">Touch to interact with the 3D object</div>
-            <div id="touchInstructions">
-                • Single finger drag: Move object left/right & up/down<br>
-                • Double tap: Reset object<br>
-                • Pinch: Scale object<br>
-                • Two finger tap: Auto-rotate toggle
-            </div>
-        </div>
-    </div>
+  <canvas id="viewer"></canvas>
+  
+  <div id="ui">
+    <button id="arButton" class="button" disabled>Checking AR...</button>
+    <button id="debugButton" class="button">Debug Info</button>
+    <div id="status">Loading...</div>
+    <div id="debug" style="display: none; font-size: 12px; max-width: 300px; word-wrap: break-word;"></div>
+  </div>
+  
+  <div id="instructions">
+    <strong>AR Mode Active</strong><br>
+    • Move your device to scan the environment<br>
+    • Tap to place the 3D model<br>
+    • Pinch to scale, drag to move<br>
+    • Tap "Exit AR" to return to 3D view
+  </div>
 
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
-            }
-        }
-    </script>
-    <script type="module">
-        // Import Three.js modules
-        import * as THREE from 'three';
-        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+  <!-- Import Maps for Module Resolution -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/examples/jsm/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+    import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+    import { ARButton } from 'three/examples/jsm/webxr/ARButton.js';
 
-        class WebAR3DApp {
-            constructor() {
-                // HARDCODED GLB FILE PATH - Change this to your model path
-                this.GLB_FILE_PATH = 'lung.glb'; // <-- CHANGE THIS PATH
-                
-                // Scale factor for models - 300% = 3x scale
-                this.MODEL_SCALE_FACTOR = 10.0;
-                
-                this.scene = null;
-                this.camera = null;
-                this.renderer = null;
-                this.arObject = null;
-                this.isARActive = false;
-                this.touchStartPos = { x: 0, y: 0 };
-                this.objectRotation = { x: 0, y: 0 };
-                this.objectPosition = { x: 0, y: 0, z: -2 };
-                this.objectScale = 1;
-                this.autoRotationSpeed = 0;
-                this.glbModel = null;
-                this.modelBoundingBox = null;
-                this.isRotating = false;
-                this.lastTouchTime = 0;
-                this.initialDistance = 0;
-                this.isScaling = false;
-                this.lastTouchCount = 0;
-                this.isModelLoaded = false;
-                this.isMouseDown = false;
-                
-                // Light references for dynamic control
-                this.lights = {
-                    ambient: null,
-                    directional: [],
-                    point: [],
-                    spot: []
-                };
-                
-                this.colors = {
-                    primary1: 0xDC4405,    // Orange - Primary
-                    primary2: 0x279989,    // Teal - Primary
-                    secondary1: 0xFF7F41,  // Light Orange - Secondary
-                    secondary2: 0x6BCABA,  // Light Teal - Secondary
-                    secondary3: 0x75787B,  // Gray - Secondary
-                    // Legacy colors for compatibility
-                    blue: 0x279989,
-                    red: 0xDC4405,
-                    green: 0x6BCABA,
-                    yellow: 0xFF7F41,
-                    purple: 0x75787B
-                };
-                
-                this.init();
-                this.setupEventListeners();
-                
-                // Automatically load the hardcoded GLB file
-                setTimeout(() => {
-                    this.loadGLBFromPath(this.GLB_FILE_PATH);
-                }, 500);
-            }
-            
-            init() {
-                // Initialize Three.js scene
-                this.scene = new THREE.Scene();
-                this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
-                this.renderer = new THREE.WebGLRenderer({ 
-                    canvas: document.getElementById('arCanvas'),
-                    antialias: true,
-                    alpha: true 
-                });
-                
-                this.renderer.setSize(window.innerWidth, window.innerHeight);
-                this.renderer.setPixelRatio(window.devicePixelRatio);
-                this.renderer.shadowMap.enabled = true;
-                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-                
-                // Setup enhanced lighting system
-                this.setupEnhancedLighting();
-                
-                // Initialize GLB loader
-                this.initGLBLoader();
-                
-                // Create default 3D object (fallback)
-                this.createDefaultObject();
-                
-                // Position camera
-                this.camera.position.set(0, 0, 0);
-                
-                // Start render loop
-                this.animate();
-                
-                this.updateLoadingProgress("Initializing - Loading GLB model...");
-            }
-            
-            updateLoadingProgress(message) {
-                document.getElementById('loadingProgress').textContent = message;
-            }
-            
-            hideLoadingOverlay() {
-                const overlay = document.getElementById('loadingOverlay');
-                overlay.style.display = 'none';
-                this.isModelLoaded = true;
-            }
-            
-            setupEnhancedLighting() {
-                // Clear existing lights
-                this.lights = {
-                    ambient: null,
-                    directional: [],
-                    point: [],
-                    spot: []
-                };
-                
-                // Enhanced Ambient Light - softer base illumination
-                this.lights.ambient = new THREE.AmbientLight(0x404040, 0.4);
-                this.scene.add(this.lights.ambient);
-                
-                // Primary Directional Light - Main sun-like light
-                const directionalLight1 = new THREE.DirectionalLight(0xffffff, 1.0);
-                directionalLight1.position.set(10, 10, 5);
-                directionalLight1.castShadow = true;
-                directionalLight1.shadow.mapSize.width = 2048;
-                directionalLight1.shadow.mapSize.height = 2048;
-                directionalLight1.shadow.camera.near = 0.1;
-                directionalLight1.shadow.camera.far = 50;
-                directionalLight1.shadow.camera.left = -10;
-                directionalLight1.shadow.camera.right = 10;
-                directionalLight1.shadow.camera.top = 10;
-                directionalLight1.shadow.camera.bottom = -10;
-                this.scene.add(directionalLight1);
-                this.lights.directional.push(directionalLight1);
-                
-                // Secondary Directional Light - Fill light from opposite side
-                const directionalLight2 = new THREE.DirectionalLight(0x6BCABA, 0.6);
-                directionalLight2.position.set(-8, 8, -5);
-                directionalLight2.castShadow = true;
-                directionalLight2.shadow.mapSize.width = 1024;
-                directionalLight2.shadow.mapSize.height = 1024;
-                this.scene.add(directionalLight2);
-                this.lights.directional.push(directionalLight2);
-                
-                // Key Point Light - Warm accent light
-                const pointLight1 = new THREE.PointLight(0xFF7F41, 0.8, 100, 2);
-                pointLight1.position.set(5, 5, 5);
-                pointLight1.castShadow = true;
-                pointLight1.shadow.mapSize.width = 1024;
-                pointLight1.shadow.mapSize.height = 1024;
-                this.scene.add(pointLight1);
-                this.lights.point.push(pointLight1);
-                
-                // Rim Point Light - Cool rim lighting
-                const pointLight2 = new THREE.PointLight(0x279989, 0.6, 80, 1.5);
-                pointLight2.position.set(-5, 3, -5);
-                pointLight2.castShadow = true;
-                this.scene.add(pointLight2);
-                this.lights.point.push(pointLight2);
-                
-                // Background Point Light - Subtle background illumination
-                const pointLight3 = new THREE.PointLight(0xDC4405, 0.4, 60, 2);
-                pointLight3.position.set(0, -5, -8);
-                this.scene.add(pointLight3);
-                this.lights.point.push(pointLight3);
-                
-                // Spot Light - Focused dramatic lighting
-                const spotLight = new THREE.SpotLight(0xffffff, 1.2, 100, Math.PI / 6, 0.5, 2);
-                spotLight.position.set(0, 15, 0);
-                spotLight.target.position.set(0, 0, -2);
-                spotLight.castShadow = true;
-                spotLight.shadow.mapSize.width = 2048;
-                spotLight.shadow.mapSize.height = 2048;
-                this.scene.add(spotLight);
-                this.scene.add(spotLight.target);
-                this.lights.spot.push(spotLight);
-                
-                // Add subtle animated light movement
-                this.animateLights();
-                
-                this.updateLoadingProgress("Enhanced lighting system initialized");
-            }
-            
-            animateLights() {
-                // Animate point lights in a subtle pattern
-                const animateLight = () => {
-                    const time = Date.now() * 0.001;
-                    
-                    // Animate point lights with subtle movement
-                    if (this.lights.point.length > 0) {
-                        this.lights.point[0].position.x = 20;
-                        this.lights.point[0].position.y = 20;
-                        
-                        if (this.lights.point.length > 1) {
-                            this.lights.point[1].position.x = -20;
-                            this.lights.point[1].position.z = -20;
-                        }
-                    }
-                    
-                    // Subtle intensity variation for ambient light
-                    if (this.lights.ambient) {
-                        this.lights.ambient.intensity = 0.4 + Math.sin(time * 0.2) * 0.1;
-                    }
-                    
-                    requestAnimationFrame(animateLight);
-                };
-                
-                animateLight();
-            }
-            
-            initGLBLoader() {
-                // Initialize GLTF loader with imported modules
-                this.gltfLoader = new GLTFLoader();
-                
-                // Optional: Setup Draco decoder for compressed models
-                const dracoLoader = new DRACOLoader();
-                dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.3/');
-                this.gltfLoader.setDRACOLoader(dracoLoader);
-                
-                this.updateLoadingProgress("GLB loader initialized - Ready to load models");
-            }
-            
-            // Load GLB from URL or file path
-            loadGLBFromPath(path) {
-                if (!path) {
-                    this.updateLoadingProgress("No GLB path provided");
-                    this.hideLoadingOverlay();
-                    return;
-                }
-                
-                this.updateLoadingProgress(`Loading GLB from: ${path}`);
-                
-                this.gltfLoader.load(
-                    path,
-                    (gltf) => {
-                        this.onGLBLoaded(gltf);
-                    },
-                    (progress) => {
-                        if (progress.total > 0) {
-                            const percent = Math.round((progress.loaded / progress.total) * 100);
-                            this.updateLoadingProgress(`Loading GLB: ${percent}%`);
-                        } else {
-                            this.updateLoadingProgress(`Loading GLB: ${Math.round(progress.loaded / 1024)}KB loaded`);
-                        }
-                    },
-                    (error) => {
-                        console.error('Error loading GLB file:', error);
-                        this.updateLoadingProgress(`Error loading GLB: ${error.message || 'File not found or invalid format'}`);
-                        // Show default object if GLB fails
-                        setTimeout(() => {
-                            this.hideLoadingOverlay();
-                            this.updateStatus("GLB loading failed - showing default 3D object");
-                        }, 2000);
-                    }
-                );
-            }
-            
-            onGLBLoaded(gltf) {
-                // Remove existing model if any
-                if (this.glbModel) {
-                    this.scene.remove(this.glbModel);
-                }
-                
-                // Remove default object if it exists
-                if (this.arObject && !this.glbModel) {
-                    this.scene.remove(this.arObject);
-                }
-                
-                // Get the loaded model
-                this.glbModel = gltf.scene;
-                
-                // Calculate bounding box for proper scaling and positioning
-                this.modelBoundingBox = new THREE.Box3().setFromObject(this.glbModel);
-                const size = this.modelBoundingBox.getSize(new THREE.Vector3());
-                const center = this.modelBoundingBox.getCenter(new THREE.Vector3());
-                
-                // Center the model
-                this.glbModel.position.sub(center);
-                
-                // Apply 300% scale (3x) to the model
-                const baseScale = this.MODEL_SCALE_FACTOR;
-                
-                // Auto-scale model to fit in view with the new scale factor
-                const maxDimension = Math.max(size.x, size.y, size.z);
-                let finalScale = baseScale;
-                
-                // If model is too large even with 300% scale, adjust it
-                if (maxDimension * baseScale > 6) {
-                    finalScale = 6 / maxDimension;
-                } else {
-                    finalScale = baseScale;
-                }
-                
-                this.glbModel.scale.set(finalScale, finalScale, finalScale);
-                
-                // Position the model
-                this.glbModel.position.set(
-                    this.objectPosition.x,
-                    this.objectPosition.y,
-                    this.objectPosition.z
-                );
-                
-                // Enable shadows and enhanced materials for all meshes in the model
-                this.glbModel.traverse((child) => {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                        child.receiveShadow = true;
-                        
-                        // Enhance materials for better lighting response
-                        if (child.material) {
-                            child.material.needsUpdate = true;
-                            
-                            // If it's a basic material, enhance it for better lighting
-                            if (child.material.type === 'MeshBasicMaterial') {
-                                const enhancedMaterial = new THREE.MeshPhongMaterial({
-                                    color: child.material.color,
-                                    map: child.material.map,
-                                    transparent: child.material.transparent,
-                                    opacity: child.material.opacity,
-                                    shininess: 100
-                                });
-                                child.material = enhancedMaterial;
-                            }
-                        }
-                    }
-                });
-                
-                // Add model to scene
-                this.scene.add(this.glbModel);
-                
-                // Update reference for interactions
-                this.arObject = this.glbModel;
-                
-                // Update the object scale tracking
-                this.objectScale = finalScale;
-                
-                // Hide loading overlay
-                this.hideLoadingOverlay();
-                this.updateStatus(`GLB model loaded at ${Math.round(finalScale * 100)}% scale! Touch to interact`);
-                
-                // Play animations if any
-                if (gltf.animations && gltf.animations.length > 0) {
-                    this.mixer = new THREE.AnimationMixer(this.glbModel);
-                    gltf.animations.forEach((clip) => {
-                        const action = this.mixer.clipAction(clip);
-                        action.play();
-                    });
-                    this.updateStatus(`GLB model loaded with animations at ${Math.round(finalScale * 100)}% scale!`);
-                }
-            }
-            
-            createDefaultObject() {
-                // Create a compound 3D object (cube with sphere on top) at 300% scale
-                const group = new THREE.Group();
-                
-                // Apply 300% scale to default object as well
-                const scale = this.MODEL_SCALE_FACTOR;
-                
-                // Base cube
-                const cubeGeometry = new THREE.BoxGeometry(0.5 * scale, 0.5 * scale, 0.5 * scale);
-                const cubeMaterial = new THREE.MeshPhongMaterial({ 
-                    color: this.colors.primary1, // Orange
-                    shininess: 100
-                });
-                const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-                cube.position.y = -0.25 * scale;
-                cube.castShadow = true;
-                cube.receiveShadow = true;
-                group.add(cube);
-                
-                // Top sphere
-                const sphereGeometry = new THREE.SphereGeometry(0.2 * scale, 32, 32);
-                const sphereMaterial = new THREE.MeshPhongMaterial({ 
-                    color: this.colors.primary2, // Teal
-                    shininess: 100
-                });
-                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-                sphere.position.y = 0.2 * scale;
-                sphere.castShadow = true;
-                group.add(sphere);
-                
-                // Add some decorative elements
-                const torusGeometry = new THREE.TorusGeometry(0.3 * scale, 0.05 * scale, 16, 100);
-                const torusMaterial = new THREE.MeshPhongMaterial({ 
-                    color: this.colors.secondary1, // Light Orange
-                    shininess: 100
-                });
-                const torus = new THREE.Mesh(torusGeometry, torusMaterial);
-                torus.rotation.x = Math.PI / 2;
-                torus.castShadow = true;
-                group.add(torus);
-                
-                // Position the object
-                group.position.set(this.objectPosition.x, this.objectPosition.y, this.objectPosition.z);
-                group.scale.set(this.objectScale, this.objectScale, this.objectScale);
-                
-                this.arObject = group;
-                this.scene.add(group);
-                
-                // Update scale tracking
-                this.objectScale = scale;
-                
-                // Hide loading overlay if no GLB is being loaded
-                if (!this.isModelLoaded) {
-                    setTimeout(() => {
-                        this.hideLoadingOverlay();
-                    }, 1000);
-                }
-            }
-            
-            setupEventListeners() {
-                const startARBtn = document.getElementById('startAR');
-                const canvas = document.getElementById('arCanvas');
-                
-                // AR controls
-                startARBtn.addEventListener('click', () => this.startAR());
-                
-                // Touch events for iPad
-                canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
-                canvas.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
-                canvas.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
-                
-                // Mouse events for desktop testing
-                canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
-                canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
-                canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
-                canvas.addEventListener('dblclick', (e) => this.resetObject());
-                
-                // Handle orientation changes
-                window.addEventListener('orientationchange', () => {
-                    setTimeout(() => this.onWindowResize(), 100);
-                });
-                
-                window.addEventListener('resize', () => this.onWindowResize());
-            }
-            
-            async startAR() {
-                const button = document.getElementById('startAR');
-                
-                // If AR is already active, stop it and close tab
-                if (this.isARActive) {
-                    this.stopAR();
-                    return;
-                }
-                
-                try {
-                    // Check for WebXR support
-                    if ('xr' in navigator) {
-                        const isSupported = await navigator.xr.isSessionSupported('immersive-ar');
-                        if (isSupported) {
-                            this.startWebXR();
-                            return;
-                        }
-                    }
-                    
-                    // Fallback to camera-based AR simulation
-                    this.startCameraAR();
-                } catch (error) {
-                    console.error('AR initialization failed:', error);
-                    this.updateStatus('AR not supported - using 3D view mode');
-                    this.isARActive = true;
-                    button.textContent = 'Stop AR';
-                }
-            }
-            
-            stopAR() {
-                // Stop any video streams
-                if (this.scene.background && this.scene.background.image && this.scene.background.image.srcObject) {
-                    const stream = this.scene.background.image.srcObject;
-                    const tracks = stream.getTracks();
-                    tracks.forEach(track => track.stop());
-                }
-                
-                // Reset background
-                this.scene.background = null;
-                this.isARActive = false;
-                
-                // Close the tab/window
-                if (window.opener) {
-                    window.close(); // Close if opened from another window
-                } else {
-                    // Try to close the tab
-                    try {
-                        window.close();
-                    } catch (e) {
-                        // If can't close, redirect to a blank page or show message
-                        window.location.href = 'about:blank';
-                    }
-                }
-            }
-            
-            async startWebXR() {
-                try {
-                    const session = await navigator.xr.requestSession('immersive-ar');
-                    this.renderer.xr.setSession(session);
-                    this.isARActive = true;
-                    this.updateStatus('WebXR AR Session Active');
-                    document.getElementById('startAR').textContent = 'Stop AR';
-                } catch (error) {
-                    console.error('WebXR failed:', error);
-                    this.startCameraAR();
-                }
-            }
-            
-            async startCameraAR() {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        video: { 
-                            facingMode: 'environment',
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 }
-                        }
-                    });
-                    
-                    // Create video element for background
-                    const video = document.createElement('video');
-                    video.srcObject = stream;
-                    video.play();
-                    
-                    video.addEventListener('loadedmetadata', () => {
-                        const videoTexture = new THREE.VideoTexture(video);
-                        this.scene.background = videoTexture;
-                        this.isARActive = true;
-                        this.updateStatus('Camera AR Active - Touch to interact');
-                        document.getElementById('startAR').textContent = 'Stop AR';
-                    });
-                } catch (error) {
-                    console.error('Camera access failed:', error);
-                    this.updateStatus('Camera unavailable - 3D view mode');
-                    this.isARActive = true;
-                    document.getElementById('startAR').textContent = 'Stop AR';
-                }
-            }
-            
-            // Get distance between two touches
-            getTouchDistance(touches) {
-                const dx = touches[0].clientX - touches[1].clientX;
-                const dy = touches[0].clientY - touches[1].clientY;
-                return Math.sqrt(dx * dx + dy * dy);
-            }
-            
-            onTouchStart(event) {
-                event.preventDefault();
-                const now = Date.now();
-                const touches = event.touches;
-                
-                if (touches.length === 1) {
-                    // Single touch - movement (not rotation)
-                    this.touchStartPos.x = touches[0].clientX;
-                    this.touchStartPos.y = touches[0].clientY;
-                    this.isRotating = true;
-                    this.updateStatus('Moving object');
-                    
-                    // Check for double tap
-                    if (now - this.lastTouchTime < 300) {
-                        this.resetObject();
-                        return;
-                    }
-                    this.lastTouchTime = now;
-                    
-                } else if (touches.length === 2) {
-                    // Two touches - check if it's a quick tap or pinch
-                    this.initialDistance = this.getTouchDistance(touches);
-                    this.isScaling = true;
-                    this.isRotating = false;
-                    
-                    // Check for two-finger tap (toggle auto-rotation)
-                    if (now - this.lastTouchTime < 300) {
-                        this.toggleAutoRotation();
-                        return;
-                    }
-                    
-                    this.updateStatus('Scaling object');
-                }
-                
-                this.lastTouchCount = touches.length;
-            }
-            
-            onTouchMove(event) {
-                event.preventDefault();
-                const touches = event.touches;
-                
-                if (touches.length === 1 && this.isRotating && this.arObject) {
-                    // Single touch movement - limited to Y-axis (left/right) and X-axis (up/down)
-                    const touch = touches[0];
-                    const deltaX = touch.clientX - this.touchStartPos.x;
-                    const deltaY = touch.clientY - this.touchStartPos.y;
-                    
-                    // Move object based on touch movement (constrained movement)
-                    // Horizontal movement (left/right) - Y-axis rotation
-                    this.objectRotation.y += deltaX * 0.01;
-                    // Vertical movement (up/down) - X-axis rotation  
-                    this.objectRotation.x += deltaY * 0.01;
-                    
-                    // Constrain X rotation to prevent flipping
-                    this.objectRotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.objectRotation.x));
-                    
-                    this.arObject.rotation.x = this.objectRotation.x;
-                    this.arObject.rotation.y = this.objectRotation.y;
-                    
-                    this.touchStartPos.x = touch.clientX;
-                    this.touchStartPos.y = touch.clientY;
-                    
-                } else if (touches.length === 2 && this.isScaling && this.arObject) {
-                    // Two touch scaling (pinch)
-                    const currentDistance = this.getTouchDistance(touches);
-                    const scale = currentDistance / this.initialDistance;
-                    
-                    // Apply scale with limits
-                    const newScale = Math.max(0.1, Math.min(10, this.objectScale * scale));
-                    this.arObject.scale.set(newScale, newScale, newScale);
-                    
-                    this.initialDistance = currentDistance;
-                    this.objectScale = newScale;
-                    
-                    this.updateStatus(`Scaling: ${this.objectScale.toFixed(2)}x`);
-                }
-            }
-            
-            onTouchEnd(event) {
-                event.preventDefault();
-                this.isRotating = false;
-                this.isScaling = false;
-                
-                if (event.touches.length === 0) {
-                    this.updateStatus('Touch interaction complete');
-                }
-            }
-            
-            // Toggle auto-rotation
-            toggleAutoRotation() {
-                if (this.autoRotationSpeed === 0) {
-                    this.autoRotationSpeed = 0.02;
-                    this.updateStatus('Auto-rotation ON');
-                } else {
-                    this.autoRotationSpeed = 0;
-                    this.updateStatus('Auto-rotation OFF');
-                }
-            }
-            
-            // Mouse events for desktop testing
-            onMouseDown(event) {
-                this.touchStartPos.x = event.clientX;
-                this.touchStartPos.y = event.clientY;
-                this.isMouseDown = true;
-                this.isRotating = true;
-            }
-            
-            onMouseMove(event) {
-                if (this.isMouseDown && this.arObject && this.isRotating) {
-                    const deltaX = event.clientX - this.touchStartPos.x;
-                    const deltaY = event.clientY - this.touchStartPos.y;
-                    
-                    this.objectRotation.y += deltaX * 0.01;
-                    this.objectRotation.x += deltaY * 0.01;
-                    
-                    // Constrain X rotation
-                    this.objectRotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.objectRotation.x));
-                    
-                    this.arObject.rotation.x = this.objectRotation.x;
-                    this.arObject.rotation.y = this.objectRotation.y;
-                    
-                    this.touchStartPos.x = event.clientX;
-                    this.touchStartPos.y = event.clientY;
-                }
-            }
-            
-            onMouseUp(event) {
-                this.isMouseDown = false;
-                this.isRotating = false;
-            }
-            
-            resetObject() {
-                if (this.arObject) {
-                    this.objectRotation = { x: 0, y: 0 };
-                    this.objectPosition = { x: 0, y: 0, z: -2 };
-                    this.objectScale = this.glbModel ? this.MODEL_SCALE_FACTOR : this.MODEL_SCALE_FACTOR;
-                    this.autoRotationSpeed = 0;
-                    
-                    this.arObject.rotation.set(0, 0, 0);
-                    this.arObject.position.set(0, 0, -2);
-                    this.arObject.scale.set(this.objectScale, this.objectScale, this.objectScale);
-                    
-                    this.updateStatus('Object reset to default state (300% scale)');
-                }
-            }
-            
-            onWindowResize() {
-                this.camera.aspect = window.innerWidth / window.innerHeight;
-                this.camera.updateProjectionMatrix();
-                this.renderer.setSize(window.innerWidth, window.innerHeight);
-            }
-            
-            updateStatus(message) {
-                document.getElementById('status').textContent = message;
-            }
-            
-            animate() {
-                requestAnimationFrame(() => this.animate());
-                
-                // Update animation mixer if GLB has animations
-                if (this.mixer) {
-                    this.mixer.update(0.016); // Assuming 60fps
-                }
-                
-                // Auto rotation
-                if (this.arObject && this.autoRotationSpeed > 0) {
-                    this.arObject.rotation.y += this.autoRotationSpeed;
-                }
-                
-                // Add subtle animation to default object only
-                if (this.arObject && !this.glbModel) {
-                    this.arObject.children[1].rotation.y += 0.01; // Rotate the sphere
-                    this.arObject.children[2].rotation.z += 0.02; // Rotate the torus
-                }
-                
-                this.renderer.render(this.scene, this.camera);
-            }
+    // Global variables
+    let scene, camera, renderer, controls;
+    let model, mixer;
+    let isARMode = false;
+    let hitTestSource = null;
+    let hitTestSourceRequested = false;
+    let reticle;
+    let modelPlaced = false;
+    
+    // UI elements
+    const arButton = document.getElementById('arButton');
+    const debugButton = document.getElementById('debugButton');
+    const status = document.getElementById('status');
+    const debug = document.getElementById('debug');
+    const instructions = document.getElementById('instructions');
+
+    // Initialize the application
+    init();
+
+    function init() {
+      // Create scene
+      scene = new THREE.Scene();
+
+      // Create camera
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.set(0, 1, 4);
+
+      // Create renderer with WebXR support
+      renderer = new THREE.WebGLRenderer({
+        canvas: document.getElementById('viewer'),
+        antialias: true,
+        alpha: true
+      });
+      renderer.setClearColor(0x111111);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.xr.enabled = true;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      // Create controls for non-AR mode
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 0, 0);
+      controls.update();
+
+      // Setup lighting
+      setupLighting();
+
+      // Create reticle for AR mode
+      createReticle();
+
+      // Check WebXR support
+      checkARSupport();
+
+      // Load GLTF model
+      loadModel();
+
+      // Setup event listeners
+      setupEventListeners();
+
+      // Start render loop
+      animate();
+    }
+
+    function setupLighting() {
+      // Directional light
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      dirLight.position.set(5, 10, 5);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      scene.add(dirLight);
+
+      // Point light
+      const pointLight = new THREE.PointLight(0xffffff, 0.6, 20);
+      pointLight.position.set(-3, 3, 3);
+      scene.add(pointLight);
+
+      // Ambient light
+      const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+      scene.add(ambientLight);
+    }
+
+    function createReticle() {
+      const geometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
+      const material = new THREE.MeshBasicMaterial({ color: 0x007AFF });
+      reticle = new THREE.Mesh(geometry, material);
+      reticle.matrixAutoUpdate = false;
+      reticle.visible = false;
+      scene.add(reticle);
+    }
+
+    async function checkARSupport() {
+      console.log('Checking AR support...');
+      
+      // First check if we're on iOS Safari
+      const isIOSSafari = /iPad|iPhone|iPod/.test(navigator.userAgent) && /Safari/.test(navigator.userAgent);
+      console.log('iOS Safari detected:', isIOSSafari);
+      
+      if ('xr' in navigator) {
+        console.log('WebXR available');
+        try {
+          // Check for immersive-ar support
+          const isSupported = await navigator.xr.isSessionSupported('immersive-ar');
+          console.log('AR session supported:', isSupported);
+          
+          if (isSupported) {
+            arButton.disabled = false;
+            arButton.textContent = 'Start AR';
+            status.textContent = 'AR Ready';
+          } else {
+            // Try fallback - enable button anyway for testing
+            arButton.disabled = false;
+            arButton.textContent = 'Try AR';
+            status.textContent = 'AR support uncertain - try anyway';
+          }
+        } catch (error) {
+          console.error('WebXR support check failed:', error);
+          // Enable button for manual testing
+          arButton.disabled = false;
+          arButton.textContent = 'Try AR';
+          status.textContent = 'AR check failed - manual test';
         }
-        
-        // Initialize the app when DOM is loaded
-        document.addEventListener('DOMContentLoaded', () => {
-            new WebAR3DApp();
-        });
-        
-        // Prevent default touch behaviors
-        document.addEventListener('touchstart', function(e) {
-            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON') {
-                e.preventDefault();
+      } else {
+        console.log('WebXR not available');
+        // For iOS Safari, enable button anyway as WebXR might still work
+        if (isIOSSafari) {
+          arButton.disabled = false;
+          arButton.textContent = 'Try AR';
+          status.textContent = 'WebXR detection failed - try anyway';
+        } else {
+          status.textContent = 'WebXR not available';
+        }
+      }
+    }
+
+    function loadModel() {
+      const loader = new GLTFLoader();
+      
+      loader.load(
+        'gltf/yourmodel.gltf', // ← Set your correct path here
+        (gltf) => {
+          model = gltf.scene;
+          
+          // Center model
+          const box = new THREE.Box3().setFromObject(model);
+          const center = box.getCenter(new THREE.Vector3());
+          model.position.sub(center);
+          
+          // Scale the model
+          model.scale.set(0.5, 0.5, 0.5); // Smaller scale for AR
+          
+          // Improve texture quality
+          model.traverse(child => {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+              
+              if (child.material) {
+                const mtl = child.material;
+                ['map', 'normalMap', 'roughnessMap', 'metalnessMap'].forEach(mapType => {
+                  if (mtl[mapType]) {
+                    mtl[mapType].anisotropy = renderer.capabilities.getMaxAnisotropy();
+                    mtl[mapType].minFilter = THREE.LinearMipMapLinearFilter;
+                    mtl[mapType].magFilter = THREE.LinearFilter;
+                    mtl[mapType].needsUpdate = true;
+                  }
+                });
+              }
             }
-        }, { passive: false });
+          });
+
+          // Setup animations if available
+          if (gltf.animations && gltf.animations.length > 0) {
+            mixer = new THREE.AnimationMixer(model);
+            gltf.animations.forEach(clip => {
+              mixer.clipAction(clip).play();
+            });
+          }
+
+          // Add to scene for normal viewing
+          scene.add(model);
+          status.textContent = 'Model loaded - AR Ready';
+        },
+        (xhr) => {
+          const progress = (xhr.loaded / xhr.total * 100).toFixed(1);
+          status.textContent = `Loading: ${progress}%`;
+        },
+        (error) => {
+          console.error('GLTF Load Error:', error);
+          status.textContent = 'Model load failed';
+        }
+      );
+    }
+
+    function setupEventListeners() {
+      // AR button click
+      arButton.addEventListener('click', toggleAR);
+      
+      // Debug button click
+      debugButton.addEventListener('click', toggleDebug);
+
+      // Window resize
+      window.addEventListener('resize', onWindowResize);
+
+      // Touch events for AR interaction
+      renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+    }
+    
+    function toggleDebug() {
+      const isVisible = debug.style.display !== 'none';
+      debug.style.display = isVisible ? 'none' : 'block';
+      
+      if (!isVisible) {
+        updateDebugInfo();
+      }
+    }
+    
+    function updateDebugInfo() {
+      const userAgent = navigator.userAgent;
+      const isIOSSafari = /iPad|iPhone|iPod/.test(userAgent) && /Safari/.test(userAgent);
+      const hasWebXR = 'xr' in navigator;
+      
+      debug.innerHTML = `
+        <strong>Debug Info:</strong><br>
+        iOS Safari: ${isIOSSafari}<br>
+        WebXR Available: ${hasWebXR}<br>
+        User Agent: ${userAgent}<br>
+        Location: ${window.location.href}<br>
+        HTTPS: ${window.location.protocol === 'https:'}<br>
+        Three.js Version: ${THREE.REVISION}
+      `;
+    }
+
+    async function toggleAR() {
+      console.log('Toggle AR clicked, isARMode:', isARMode);
+      
+      if (!isARMode) {
+        try {
+          console.log('Attempting to start AR session...');
+          
+          // Try different session configurations
+          const sessionOptions = [
+            {
+              requiredFeatures: ['hit-test'],
+              optionalFeatures: ['dom-overlay'],
+              domOverlay: { root: document.body }
+            },
+            {
+              requiredFeatures: ['hit-test']
+            },
+            {
+              optionalFeatures: ['hit-test']
+            },
+            {} // Minimal config
+          ];
+          
+          let session = null;
+          
+          for (let i = 0; i < sessionOptions.length; i++) {
+            try {
+              console.log(`Trying session config ${i + 1}:`, sessionOptions[i]);
+              session = await navigator.xr.requestSession('immersive-ar', sessionOptions[i]);
+              console.log('AR session created successfully with config', i + 1);
+              break;
+            } catch (configError) {
+              console.log(`Config ${i + 1} failed:`, configError);
+              if (i === sessionOptions.length - 1) {
+                throw configError;
+              }
+            }
+          }
+          
+          if (session) {
+            await renderer.xr.setSession(session);
+            isARMode = true;
+            arButton.textContent = 'Exit AR';
+            instructions.classList.add('ar-instructions');
+            status.textContent = 'AR Mode Active';
+            
+            // Hide model initially in AR mode
+            if (model) {
+              model.visible = false;
+            }
+            
+            // Disable orbit controls in AR
+            controls.enabled = false;
+            
+            console.log('AR session started successfully');
+          }
+          
+        } catch (error) {
+          console.error('Failed to start AR session:', error);
+          status.textContent = `AR failed: ${error.message}`;
+          
+          // Show detailed error info
+          if (error.name === 'NotSupportedError') {
+            status.textContent = 'AR not supported on this device';
+          } else if (error.name === 'NotAllowedError') {
+            status.textContent = 'AR permission denied';
+          } else if (error.name === 'SecurityError') {
+            status.textContent = 'AR requires HTTPS';
+          } else {
+            status.textContent = `AR error: ${error.name}`;
+          }
+        }
+      } else {
+        console.log('Ending AR session...');
+        const session = renderer.xr.getSession();
+        if (session) {
+          session.end();
+        }
+      }
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onTouchStart(event) {
+      if (isARMode && reticle.visible && model) {
+        event.preventDefault();
         
-        document.addEventListener('touchmove', function(e) {
-            e.preventDefault();
-        }, { passive: false });
-    </script>
+        // Place or move model
+        model.position.copy(reticle.position);
+        model.visible = true;
+        modelPlaced = true;
+        
+        // Add some visual feedback
+        model.scale.set(0.1, 0.1, 0.1);
+        
+        // Animate scale up
+        const targetScale = 0.5;
+        const animateScale = () => {
+          if (model.scale.x < targetScale) {
+            model.scale.addScalar(0.02);
+            requestAnimationFrame(animateScale);
+          }
+        };
+        animateScale();
+      }
+    }
+
+    function animate() {
+      renderer.setAnimationLoop(render);
+    }
+
+    function render(timestamp, frame) {
+      if (mixer) {
+        mixer.update(0.016); // Assuming 60fps
+      }
+
+      if (frame && isARMode) {
+        const session = renderer.xr.getSession();
+        
+        if (hitTestSourceRequested === false) {
+          session.requestReferenceSpace('viewer').then(referenceSpace => {
+            session.requestHitTestSource({ space: referenceSpace }).then(source => {
+              hitTestSource = source;
+            });
+          });
+          hitTestSourceRequested = true;
+        }
+
+        if (hitTestSource) {
+          const hitTestResults = frame.getHitTestResults(hitTestSource);
+          
+          if (hitTestResults.length > 0) {
+            const hit = hitTestResults[0];
+            reticle.visible = true;
+            reticle.matrix.fromArray(hit.getPose(renderer.xr.getReferenceSpace()).transform.matrix);
+          } else {
+            reticle.visible = false;
+          }
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    // Handle AR session end
+    renderer.xr.addEventListener('sessionstart', () => {
+      console.log('AR session started');
+    });
+
+    renderer.xr.addEventListener('sessionend', () => {
+      console.log('AR session ended');
+      isARMode = false;
+      arButton.textContent = 'Start AR';
+      instructions.classList.remove('ar-instructions');
+      status.textContent = 'AR Ready';
+      
+      // Re-enable orbit controls
+      controls.enabled = true;
+      
+      // Show model in normal mode
+      if (model) {
+        model.visible = true;
+        model.position.set(0, 0, 0);
+        model.scale.set(0.5, 0.5, 0.5);
+      }
+      
+      // Reset hit test
+      hitTestSourceRequested = false;
+      hitTestSource = null;
+      modelPlaced = false;
+    });
+  </script>
 </body>
 </html>
